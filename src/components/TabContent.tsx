@@ -564,6 +564,7 @@ const TabQueryBuilder = memo(function TabQueryBuilder({ tab, tableInfo }: TabQue
       lastEvaluatedKey: undefined,
       queryStartTime: startTime,
       queryElapsedMs: 0,
+      lastOperation: 'query',
     });
 
     // Accumulate items from progress events for streaming display
@@ -649,8 +650,21 @@ const TabQueryBuilder = memo(function TabQueryBuilder({ tab, tableInfo }: TabQue
   const handleScan = async () => {
     if (!profileName) return;
 
+    const pkValueForScan = localPkValue.trim();
+    const usePkPrefixFilter = queryState.scanPkPrefix && pkValueForScan.length > 0;
+    if (usePkPrefixFilter && pkAttrType && pkAttrType !== 'S') {
+      updateTabQueryState(tab.id, {
+        error: 'PK prefix scan only supports string partition keys',
+      });
+      return;
+    }
+
     const startTime = Date.now();
     updateTabQueryState(tab.id, {
+      // Persist local values to store (useful for PK prefix scan + fetch more)
+      pkValue: localPkValue,
+      skValue: localSkValue,
+      skValue2: localSkEndValue,
       isLoading: true,
       error: null,
       results: [],
@@ -659,6 +673,7 @@ const TabQueryBuilder = memo(function TabQueryBuilder({ tab, tableInfo }: TabQue
       lastEvaluatedKey: undefined,
       queryStartTime: startTime,
       queryElapsedMs: 0,
+      lastOperation: 'scan',
     });
 
     // Accumulate items from progress events for streaming display
@@ -694,10 +709,25 @@ const TabQueryBuilder = memo(function TabQueryBuilder({ tab, tableInfo }: TabQue
     });
 
     try {
+      const scanFilters: FilterCondition[] = [...validFilters];
+      if (usePkPrefixFilter && pkAttr) {
+        const alreadyHasPkPrefix = scanFilters.some(
+          (f) => f.attribute === pkAttr.attributeName && f.operator === 'begins_with'
+        );
+        if (!alreadyHasPkPrefix) {
+          scanFilters.push({
+            id: 'pk-prefix',
+            attribute: pkAttr.attributeName,
+            operator: 'begins_with',
+            value: pkValueForScan,
+          });
+        }
+      }
+
       const result = await window.dynomite.scanTableBatch(profileName, {
         tableName: tableInfo.tableName,
         indexName: queryState.selectedIndex || undefined,
-        filters: validFilters.length > 0 ? validFilters : undefined,
+        filters: scanFilters.length > 0 ? scanFilters : undefined,
       }, queryState.maxResults);
 
       // Final update with complete results (in case any items weren't sent via progress)
@@ -796,6 +826,16 @@ const TabQueryBuilder = memo(function TabQueryBuilder({ tab, tableInfo }: TabQue
         )}
 
         {/* Action buttons */}
+        <Button
+          variant={queryState.scanPkPrefix ? 'secondary' : 'ghost'}
+          size="sm"
+          className="h-8 px-2 text-[10px] shrink-0"
+          onClick={() => updateTabQueryState(tab.id, { scanPkPrefix: !queryState.scanPkPrefix })}
+          disabled={!localPkValue.trim() || queryState.isLoading}
+          title="When enabled, Scan adds begins_with(PK, value) using the selected index PK"
+        >
+          PK Prefix
+        </Button>
         <Button
           variant="outline"
           size="sm"
@@ -2331,8 +2371,11 @@ export function TabContent() {
     });
 
     try {
-      // Use query if we have a PK value, otherwise scan
-      if (queryState.pkValue && pkAttr) {
+      const shouldQuery =
+        queryState.lastOperation === 'query' ||
+        (queryState.lastOperation === null && !!queryState.pkValue && !!pkAttr);
+
+      if (shouldQuery && queryState.pkValue && pkAttr) {
         const params: QueryParams = {
           tableName: tableInfo.tableName,
           indexName: queryState.selectedIndex || undefined,
@@ -2366,10 +2409,35 @@ export function TabContent() {
           queryElapsedMs: Date.now() - startTime,
         });
       } else {
+        const usePkPrefixFilter =
+          queryState.lastOperation === 'scan' &&
+          queryState.scanPkPrefix &&
+          queryState.pkValue.trim().length > 0 &&
+          !!pkAttr;
+
+        if (usePkPrefixFilter && pkAttrType && pkAttrType !== 'S') {
+          throw new Error('PK prefix scan only supports string partition keys');
+        }
+
+        const scanFilters: FilterCondition[] = [...validFilters];
+        if (usePkPrefixFilter && pkAttr) {
+          const alreadyHasPkPrefix = scanFilters.some(
+            (f) => f.attribute === pkAttr.attributeName && f.operator === 'begins_with'
+          );
+          if (!alreadyHasPkPrefix) {
+            scanFilters.push({
+              id: 'pk-prefix',
+              attribute: pkAttr.attributeName,
+              operator: 'begins_with',
+              value: queryState.pkValue.trim(),
+            });
+          }
+        }
+
         const result = await window.dynomite.scanTableBatch(activeTab.profileName, {
           tableName: tableInfo.tableName,
           indexName: queryState.selectedIndex || undefined,
-          filters: validFilters.length > 0 ? validFilters : undefined,
+          filters: scanFilters.length > 0 ? scanFilters : undefined,
           exclusiveStartKey: queryState.lastEvaluatedKey,
         }, queryState.maxResults);
 
@@ -2425,6 +2493,7 @@ export function TabContent() {
           lastEvaluatedKey: undefined,
           queryStartTime: startTime,
           queryElapsedMs: 0,
+          lastOperation: 'scan',
         });
 
         // Accumulate items from progress events for streaming display

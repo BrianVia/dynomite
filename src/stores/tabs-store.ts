@@ -29,12 +29,14 @@ const saveMaxResults = (value: number): void => {
 export interface TabQueryState {
   selectedIndex: string | null;
   pkValue: string;
+  scanPkPrefix: boolean; // When scanning, use begins_with(PK, pkValue)
   skOperator: SkOperator;
   skValue: string;
   skValue2: string;
   filters: FilterCondition[];
   maxResults: number; // Target max results to fetch (auto-paginates until this)
   scanForward: boolean;
+  lastOperation: 'query' | 'scan' | null; // Used for "fetch more" routing
   results: Record<string, unknown>[];
   lastEvaluatedKey?: Record<string, unknown>;
   isLoading: boolean;
@@ -74,12 +76,14 @@ interface TabsState {
 const createDefaultQueryState = (): TabQueryState => ({
   selectedIndex: null,
   pkValue: '',
+  scanPkPrefix: false,
   skOperator: 'eq',
   skValue: '',
   skValue2: '',
   filters: [],
   maxResults: getStoredMaxResults(), // Use persisted default
   scanForward: true, // Ascending order (regular sort key)
+  lastOperation: null,
   results: [],
   lastEvaluatedKey: undefined,
   isLoading: false,

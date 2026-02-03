@@ -54,12 +54,14 @@ export function BookmarksList({ tableName }: BookmarksListProps) {
     updateTabQueryState(activeTab.id, {
       selectedIndex: bookmark.selectedIndex,
       pkValue: bookmark.pkValue,
+      scanPkPrefix: false,
       skOperator: bookmark.skOperator,
       skValue: bookmark.skValue,
       skValue2: bookmark.skValue2,
       filters: bookmark.filters,
       maxResults: bookmark.maxResults,
       scanForward: bookmark.scanForward,
+      lastOperation: null,
       // Clear stale results
       results: [],
       count: 0,

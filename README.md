@@ -22,6 +22,7 @@ A macOS Electron app for browsing and querying DynamoDB tables across multiple A
 - **Index Selection**: Query primary table or any GSI/LSI
 - **Sort Key Operators**: `=`, `begins_with`, `between`, `<`, `<=`, `>`, `>=`
 - **Configurable Limits**: Set max results with auto-pagination
+- **PK Prefix Scan**: Scan with `begins_with(PK, value)` for partial PK / GSI PK lookups
 
 ### Results Table
 - **Spreadsheet-Style View**: Powered by TanStack Table
