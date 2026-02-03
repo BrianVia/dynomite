@@ -67,6 +67,9 @@ interface TabsState {
   openTab: (tableName: string, tableInfo: TableInfo | null, profileName: string) => void;
   openTabInBackground: (tableName: string, tableInfo: TableInfo | null, profileName: string) => void;
   closeTab: (tabId: string) => void;
+  closeOtherTabs: (tabId: string) => void;
+  closeTabsToLeft: (tabId: string) => void;
+  closeTabsToRight: (tabId: string) => void;
   setActiveTab: (tabId: string) => void;
   updateTabTableInfo: (tabId: string, tableInfo: TableInfo) => void;
   updateTabQueryState: (tabId: string, updates: Partial<TabQueryState>) => void;
@@ -99,92 +102,33 @@ const createDefaultQueryState = (): TabQueryState => ({
 let tabIdCounter = 0;
 const generateTabId = () => `tab-${++tabIdCounter}`;
 
-export const useTabsStore = create<TabsState>((set, get) => ({
-  tabs: [],
-  activeTabId: null,
+const TAB_CLOSE_ANIMATION_MS = 150;
 
-  openTab: (tableName, tableInfo, profileName) => {
+export const useTabsStore = create<TabsState>((set, get) => {
+  const batchCloseTabs = (tabIdsToClose: string[], preferredActiveTabId?: string) => {
     const state = get();
+    const ids = new Set(
+      tabIdsToClose.filter((id) => {
+        const tab = state.tabs.find(t => t.id === id);
+        return tab && !tab.isClosing;
+      })
+    );
+    if (ids.size === 0) return;
 
-    // Check if tab with this table AND profile already exists
-    const existingTab = state.tabs.find(t => t.tableName === tableName && t.profileName === profileName);
-    if (existingTab) {
-      set({ activeTabId: existingTab.id });
-      return;
-    }
-
-    const newTab: Tab = {
-      id: generateTabId(),
-      tableName,
-      tableInfo,
-      queryState: createDefaultQueryState(),
-      profileName,
-      isNew: true,
-    };
-
-    set({
-      tabs: [...state.tabs, newTab],
-      activeTabId: newTab.id,
-    });
-
-    // Clear the isNew flag after animation
-    setTimeout(() => {
-      set(state => ({
-        tabs: state.tabs.map(t => t.id === newTab.id ? { ...t, isNew: false } : t),
-      }));
-    }, 200);
-  },
-
-  openTabInBackground: (tableName, tableInfo, profileName) => {
-    const state = get();
-
-    // Always create a new tab - user explicitly requested "Open in New Tab"
-    const newTab: Tab = {
-      id: generateTabId(),
-      tableName,
-      tableInfo,
-      queryState: createDefaultQueryState(),
-      profileName,
-      isNew: true,
-    };
-
-    set({
-      tabs: [...state.tabs, newTab],
-      // Keep activeTabId unchanged
-    });
-
-    // Clear the isNew flag after animation
-    setTimeout(() => {
-      set(state => ({
-        tabs: state.tabs.map(t => t.id === newTab.id ? { ...t, isNew: false } : t),
-      }));
-    }, 200);
-  },
-
-  closeTab: (tabId) => {
-    const state = get();
-    const tabIndex = state.tabs.findIndex(t => t.id === tabId);
-    if (tabIndex === -1) return;
-
-    // Mark tab as closing for exit animation
     set(state => ({
-      tabs: state.tabs.map(t => t.id === tabId ? { ...t, isClosing: true } : t),
+      tabs: state.tabs.map(t => (ids.has(t.id) ? { ...t, isClosing: true } : t)),
     }));
 
-    // Actually remove the tab after animation
     setTimeout(() => {
       const currentState = get();
-      const newTabs = currentState.tabs.filter(t => t.id !== tabId);
+      const newTabs = currentState.tabs.filter(t => !ids.has(t.id));
 
       let newActiveTabId = currentState.activeTabId;
-      if (currentState.activeTabId === tabId) {
-        // If closing active tab, switch to adjacent tab
-        if (newTabs.length === 0) {
-          newActiveTabId = null;
-        } else if (tabIndex >= newTabs.length) {
-          newActiveTabId = newTabs[newTabs.length - 1].id;
+      if (!newActiveTabId || ids.has(newActiveTabId)) {
+        if (preferredActiveTabId && newTabs.some(t => t.id === preferredActiveTabId)) {
+          newActiveTabId = preferredActiveTabId;
         } else {
-          newActiveTabId = newTabs[tabIndex].id;
+          newActiveTabId = newTabs[newTabs.length - 1]?.id ?? null;
         }
       }
 
@@ -192,38 +136,157 @@ export const useTabsStore = create<TabsState>((set, get) => ({
         tabs: newTabs,
         activeTabId: newActiveTabId,
       });
-    }, 150);
-  },
+    }, TAB_CLOSE_ANIMATION_MS);
+  };
 
-  setActiveTab: (tabId) => {
-    set({ activeTabId: tabId });
-  },
+  return {
+    tabs: [],
+    activeTabId: null,
 
-  updateTabTableInfo: (tabId, tableInfo) => {
-    set(state => ({
-      tabs: state.tabs.map(tab =>
-        tab.id === tabId ? { ...tab, tableInfo } : tab
-      ),
-    }));
-  },
+    openTab: (tableName, tableInfo, profileName) => {
+      const state = get();
 
-  updateTabQueryState: (tabId, updates) => {
-    // Persist maxResults when it changes
-    if (updates.maxResults !== undefined) {
-      saveMaxResults(updates.maxResults);
-    }
-    set(state => ({
-      tabs: state.tabs.map(tab =>
-        tab.id === tabId
-          ? { ...tab, queryState: { ...tab.queryState, ...updates } }
-          : tab
-      ),
-    }));
-  },
+      // Check if tab with this table AND profile already exists
+      const existingTab = state.tabs.find(t => t.tableName === tableName && t.profileName === profileName);
+      if (existingTab) {
+        set({ activeTabId: existingTab.id });
+        return;
+      }
 
-  getActiveTab: () => {
-    const state = get();
-    if (!state.activeTabId) return null;
-    return state.tabs.find(t => t.id === state.activeTabId) || null;
-  },
-}));
+      const newTab: Tab = {
+        id: generateTabId(),
+        tableName,
+        tableInfo,
+        queryState: createDefaultQueryState(),
+        profileName,
+        isNew: true,
+      };
+
+      set({
+        tabs: [...state.tabs, newTab],
+        activeTabId: newTab.id,
+      });
+
+      // Clear the isNew flag after animation
+      setTimeout(() => {
+        set(state => ({
+          tabs: state.tabs.map(t => t.id === newTab.id ? { ...t, isNew: false } : t),
+        }));
+      }, 200);
+    },
+
+    openTabInBackground: (tableName, tableInfo, profileName) => {
+      const state = get();
+
+      // Always create a new tab - user explicitly requested "Open in New Tab"
+      const newTab: Tab = {
+        id: generateTabId(),
+        tableName,
+        tableInfo,
+        queryState: createDefaultQueryState(),
+        profileName,
+        isNew: true,
+      };
+
+      set({
+        tabs: [...state.tabs, newTab],
+        // Keep activeTabId unchanged
+      });
+
+      // Clear the isNew flag after animation
+      setTimeout(() => {
+        set(state => ({
+          tabs: state.tabs.map(t => t.id === newTab.id ? { ...t, isNew: false } : t),
+        }));
+      }, 200);
+    },
+
+    closeTab: (tabId) => {
+      const state = get();
+      const tabIndex = state.tabs.findIndex(t => t.id === tabId);
+      if (tabIndex === -1) return;
+
+      // Mark tab as closing for exit animation
+      set(state => ({
+        tabs: state.tabs.map(t => t.id === tabId ? { ...t, isClosing: true } : t),
+      }));
+
+      // Actually remove the tab after animation
+      setTimeout(() => {
+        const currentState = get();
+        const newTabs = currentState.tabs.filter(t => t.id !== tabId);
+
+        let newActiveTabId = currentState.activeTabId;
+        if (currentState.activeTabId === tabId) {
+          // If closing active tab, switch to adjacent tab
+          if (newTabs.length === 0) {
+            newActiveTabId = null;
+          } else if (tabIndex >= newTabs.length) {
+            newActiveTabId = newTabs[newTabs.length - 1].id;
+          } else {
+            newActiveTabId = newTabs[tabIndex].id;
+          }
+        }
+
+        set({
+          tabs: newTabs,
+          activeTabId: newActiveTabId,
+        });
+      }, TAB_CLOSE_ANIMATION_MS);
+    },
+
+    closeOtherTabs: (tabId) => {
+      const state = get();
+      const idsToClose = state.tabs.filter(t => t.id !== tabId).map(t => t.id);
+      batchCloseTabs(idsToClose, tabId);
+    },
+
+    closeTabsToLeft: (tabId) => {
+      const state = get();
+      const index = state.tabs.findIndex(t => t.id === tabId);
+      if (index <= 0) return;
+      const idsToClose = state.tabs.slice(0, index).map(t => t.id);
+      batchCloseTabs(idsToClose, tabId);
+    },
+
+    closeTabsToRight: (tabId) => {
+      const state = get();
+      const index = state.tabs.findIndex(t => t.id === tabId);
+      if (index === -1 || index >= state.tabs.length - 1) return;
+      const idsToClose = state.tabs.slice(index + 1).map(t => t.id);
+      batchCloseTabs(idsToClose, tabId);
+    },
+
+    setActiveTab: (tabId) => {
+      set({ activeTabId: tabId });
+    },
+
+    updateTabTableInfo: (tabId, tableInfo) => {
+      set(state => ({
+        tabs: state.tabs.map(tab =>
+          tab.id === tabId ? { ...tab, tableInfo } : tab
+        ),
+      }));
+    },
+
+    updateTabQueryState: (tabId, updates) => {
+      // Persist maxResults when it changes
+      if (updates.maxResults !== undefined) {
+        saveMaxResults(updates.maxResults);
+      }
+      set(state => ({
+        tabs: state.tabs.map(tab =>
+          tab.id === tabId
+            ? { ...tab, queryState: { ...tab.queryState, ...updates } }
+            : tab
+        ),
+      }));
+    },
+
+    getActiveTab: () => {
+      const state = get();
+      if (!state.activeTabId) return null;
+      return state.tabs.find(t => t.id === state.activeTabId) || null;
+    },
+  };
+});
