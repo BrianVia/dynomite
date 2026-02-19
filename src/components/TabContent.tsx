@@ -391,7 +391,7 @@ const TabQueryBuilder = memo(function TabQueryBuilder({ tab, tableInfo }: TabQue
   const { updateTabQueryState } = useTabsStore();
   const queryState = tab.queryState;
   const profileName = tab.profileName;
-  const [showSkCondition, setShowSkCondition] = useState(false);
+  const [showSkCondition, setShowSkCondition] = useState(true);
   const [showSaveBookmark, setShowSaveBookmark] = useState(false);
 
   // Local state for inputs - provides instant feedback without waiting for store re-render
