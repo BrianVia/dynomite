@@ -14,6 +14,7 @@ interface BookmarksState {
       name: string;
       selectedIndex: string | null;
       pkValue: string;
+      scanPkPrefix: boolean;
       skOperator: SkOperator;
       skValue: string;
       skValue2: string;
@@ -30,6 +31,7 @@ interface BookmarksState {
         | 'name'
         | 'selectedIndex'
         | 'pkValue'
+        | 'scanPkPrefix'
         | 'skOperator'
         | 'skValue'
         | 'skValue2'

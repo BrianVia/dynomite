@@ -7,6 +7,7 @@ import type { SavedBookmark, FilterCondition, SkOperator } from '@/types';
 interface QueryState {
   selectedIndex: string | null;
   pkValue: string;
+  scanPkPrefix?: boolean;
   skOperator: SkOperator;
   skValue: string;
   skValue2: string;
@@ -55,6 +56,7 @@ export function SaveBookmarkDialog({
         name: trimmedName,
         selectedIndex: queryState.selectedIndex,
         pkValue: queryState.pkValue,
+        scanPkPrefix: queryState.scanPkPrefix ?? false,
         skOperator: queryState.skOperator,
         skValue: queryState.skValue,
         skValue2: queryState.skValue2,
@@ -68,6 +70,7 @@ export function SaveBookmarkDialog({
         name: trimmedName,
         selectedIndex: queryState.selectedIndex,
         pkValue: queryState.pkValue,
+        scanPkPrefix: queryState.scanPkPrefix ?? false,
         skOperator: queryState.skOperator,
         skValue: queryState.skValue,
         skValue2: queryState.skValue2,
@@ -142,6 +145,7 @@ export function SaveBookmarkDialog({
               {queryState.pkValue && (
                 <div>
                   <span className="text-muted-foreground">PK:</span>{' '}
+                  {queryState.scanPkPrefix ? 'starts with ' : ''}
                   {queryState.pkValue}
                 </div>
               )}

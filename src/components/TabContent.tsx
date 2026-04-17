@@ -148,6 +148,110 @@ function extractPrimaryKey(
   return pk;
 }
 
+interface RowQueryShortcut {
+  id: string;
+  label: string;
+  indexName: string | null;
+  pk: { name: string; value: string; valueType?: 'S' | 'N' | 'B' };
+  sk?: { name: string; value: string; valueType?: 'S' | 'N' | 'B' };
+}
+
+function getAttributeType(tableInfo: TableInfo, attributeName: string) {
+  return tableInfo.attributeDefinitions.find((attr) => attr.attributeName === attributeName)?.attributeType;
+}
+
+function getUsableKeyValue(
+  row: Record<string, unknown>,
+  attributeName: string,
+  valueType?: 'S' | 'N' | 'B'
+): string | undefined {
+  const value = row[attributeName];
+  if (value === null || value === undefined) return undefined;
+
+  if (valueType === 'N') {
+    return typeof value === 'number' || typeof value === 'string' ? String(value) : undefined;
+  }
+
+  if (valueType === 'S') {
+    return typeof value === 'string' ? value : undefined;
+  }
+
+  if (valueType === 'B') {
+    return typeof value === 'string' ? value : undefined;
+  }
+
+  return typeof value === 'string' || typeof value === 'number' ? String(value) : undefined;
+}
+
+function formatQueryShortcutValue(value: string): string {
+  return value.length > 36 ? `${value.slice(0, 33)}...` : value;
+}
+
+function buildRowQueryShortcuts(
+  row: Record<string, unknown>,
+  tableInfo: TableInfo
+): RowQueryShortcut[] {
+  const shortcuts: RowQueryShortcut[] = [];
+  const seen = new Set<string>();
+
+  const addShortcutsForKeySchema = (
+    keySchema: TableInfo['keySchema'],
+    indexName: string | null,
+    labelPrefix: string
+  ) => {
+    const pkAttr = keySchema.find((k) => k.keyType === 'HASH');
+    if (!pkAttr) return;
+
+    const pkType = getAttributeType(tableInfo, pkAttr.attributeName);
+    const pkValue = getUsableKeyValue(row, pkAttr.attributeName, pkType);
+    if (pkValue === undefined) return;
+
+    const pkShortcutKey = `${indexName || 'primary'}:${pkAttr.attributeName}:${pkValue}`;
+    if (!seen.has(pkShortcutKey)) {
+      seen.add(pkShortcutKey);
+      const pkLabel = indexName ? `${labelPrefix} PK` : 'PK';
+      shortcuts.push({
+        id: pkShortcutKey,
+        label: `Open ${pkLabel}: ${formatQueryShortcutValue(pkValue)} as query`,
+        indexName,
+        pk: { name: pkAttr.attributeName, value: pkValue, valueType: pkType },
+      });
+    }
+
+    const skAttr = keySchema.find((k) => k.keyType === 'RANGE');
+    if (!skAttr) return;
+
+    const skType = getAttributeType(tableInfo, skAttr.attributeName);
+    const skValue = getUsableKeyValue(row, skAttr.attributeName, skType);
+    if (skValue === undefined) return;
+
+    const pkSkShortcutKey = `${pkShortcutKey}:${skAttr.attributeName}:${skValue}`;
+    if (seen.has(pkSkShortcutKey)) return;
+
+    seen.add(pkSkShortcutKey);
+    const pkSkLabel = indexName ? `${labelPrefix} PK + SK` : 'PK + SK';
+    shortcuts.push({
+      id: pkSkShortcutKey,
+      label: `Open ${pkSkLabel}: ${formatQueryShortcutValue(pkValue)} / ${formatQueryShortcutValue(skValue)}`,
+      indexName,
+      pk: { name: pkAttr.attributeName, value: pkValue, valueType: pkType },
+      sk: { name: skAttr.attributeName, value: skValue, valueType: skType },
+    });
+  };
+
+  addShortcutsForKeySchema(tableInfo.keySchema, null, 'Primary');
+
+  tableInfo.globalSecondaryIndexes?.forEach((gsi) => {
+    addShortcutsForKeySchema(gsi.keySchema, gsi.indexName, gsi.indexName);
+  });
+
+  tableInfo.localSecondaryIndexes?.forEach((lsi) => {
+    addShortcutsForKeySchema(lsi.keySchema, lsi.indexName, lsi.indexName);
+  });
+
+  return shortcuts;
+}
+
 interface EditableCellRendererProps {
   value: unknown;
   columnId: string;
@@ -547,6 +651,11 @@ const TabQueryBuilder = memo(function TabQueryBuilder({ tab, tableInfo }: TabQue
 
   // Use batch API - single IPC call with backend pagination and progress events
   const handleRunQuery = async () => {
+    if (queryState.scanPkPrefix || !localPkValue.trim()) {
+      await handleScan();
+      return;
+    }
+
     if (!profileName || !localPkValue.trim()) return;
 
     const startTime = Date.now();
@@ -755,13 +864,18 @@ const TabQueryBuilder = memo(function TabQueryBuilder({ tab, tableInfo }: TabQue
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && localPkValue.trim()) {
+    if (e.key === 'Enter') {
       e.preventDefault();
-      handleRunQuery(); // Uses local values directly, persists to store
+      if (queryState.scanPkPrefix || !localPkValue.trim()) {
+        handleScan();
+      } else {
+        handleRunQuery(); // Uses local values directly, persists to store
+      }
     }
   };
 
-  const canQuery = localPkValue.trim().length > 0;
+  const usesScanFromPkRow = queryState.scanPkPrefix || localPkValue.trim().length === 0;
+  const primaryActionLabel = usesScanFromPkRow ? 'Run Scan' : 'Query';
 
   return (
     <div className="bg-card">
@@ -783,7 +897,26 @@ const TabQueryBuilder = memo(function TabQueryBuilder({ tab, tableInfo }: TabQue
           <ChevronDown className="absolute right-1.5 top-1/2 -translate-y-1/2 h-3 w-3 text-muted-foreground pointer-events-none" />
         </div>
 
-        <span className="text-xs text-muted-foreground">=</span>
+        <div className="relative shrink-0">
+          <select
+            value={queryState.scanPkPrefix ? 'begins_with' : 'eq'}
+            onChange={(e) => {
+              updateTabQueryState(tab.id, {
+                scanPkPrefix: e.target.value === 'begins_with',
+                results: [],
+                lastEvaluatedKey: undefined,
+                count: 0,
+                scannedCount: 0,
+              });
+            }}
+            className="h-8 pl-2 pr-7 rounded border border-input bg-background text-xs appearance-none cursor-pointer focus:outline-none focus:ring-1 focus:ring-ring"
+            title="Exact match uses Query. Starts with uses Scan with a PK prefix filter."
+          >
+            <option value="eq">=</option>
+            <option value="begins_with">starts with</option>
+          </select>
+          <ChevronDown className="absolute right-1.5 top-1/2 -translate-y-1/2 h-3 w-3 text-muted-foreground pointer-events-none" />
+        </div>
 
         {/* PK Value input */}
         <input
@@ -792,7 +925,11 @@ const TabQueryBuilder = memo(function TabQueryBuilder({ tab, tableInfo }: TabQue
           onChange={(e) => setLocalPkValue(e.target.value)}
           onBlur={flushToStore}
           onKeyDown={handleKeyDown}
-          placeholder={`Enter ${pkAttr?.attributeName || 'pk'} value`}
+          placeholder={
+            queryState.scanPkPrefix
+              ? `Prefix for ${pkAttr?.attributeName || 'pk'}; blank scans all`
+              : `Enter ${pkAttr?.attributeName || 'pk'} value; blank scans all`
+          }
           className="flex-1 min-w-0 h-8 px-2 rounded border border-input bg-background text-sm focus:outline-none focus:ring-1 focus:ring-ring"
         />
 
@@ -827,16 +964,6 @@ const TabQueryBuilder = memo(function TabQueryBuilder({ tab, tableInfo }: TabQue
 
         {/* Action buttons */}
         <Button
-          variant={queryState.scanPkPrefix ? 'secondary' : 'ghost'}
-          size="sm"
-          className="h-8 px-2 text-[10px] shrink-0"
-          onClick={() => updateTabQueryState(tab.id, { scanPkPrefix: !queryState.scanPkPrefix })}
-          disabled={!localPkValue.trim() || queryState.isLoading}
-          title="When enabled, Scan adds begins_with(PK, value) using the selected index PK"
-        >
-          PK Prefix
-        </Button>
-        <Button
           variant="outline"
           size="sm"
           className="h-8 px-2 text-xs shrink-0"
@@ -850,10 +977,14 @@ const TabQueryBuilder = memo(function TabQueryBuilder({ tab, tableInfo }: TabQue
           size="sm"
           className="h-8 px-3 text-xs shrink-0"
           onClick={handleRunQuery}
-          disabled={queryState.isLoading || !canQuery}
+          disabled={queryState.isLoading}
         >
-          <Play className="h-3 w-3 mr-1" />
-          Query
+          {usesScanFromPkRow ? (
+            <ScanLine className="h-3 w-3 mr-1" />
+          ) : (
+            <Play className="h-3 w-3 mr-1" />
+          )}
+          {primaryActionLabel}
         </Button>
         <Button
           variant="ghost"
@@ -1113,6 +1244,7 @@ const TabQueryBuilder = memo(function TabQueryBuilder({ tab, tableInfo }: TabQue
         queryState={{
           selectedIndex: queryState.selectedIndex,
           pkValue: localPkValue,
+          scanPkPrefix: queryState.scanPkPrefix,
           skOperator: queryState.skOperator,
           skValue: localSkValue,
           skValue2: localSkEndValue,
@@ -1134,6 +1266,7 @@ const TabQueryBuilder = memo(function TabQueryBuilder({ tab, tableInfo }: TabQue
     prevProps.tab.profileName === nextProps.tab.profileName &&
     prevProps.tableInfo === nextProps.tableInfo &&
     prevQ.selectedIndex === nextQ.selectedIndex &&
+    prevQ.scanPkPrefix === nextQ.scanPkPrefix &&
     prevQ.scanForward === nextQ.scanForward &&
     prevQ.skOperator === nextQ.skOperator &&
     prevQ.filters === nextQ.filters &&
@@ -1297,6 +1430,108 @@ const TabResultsTable = memo(function TabResultsTable({ tab, tableInfo, onFetchM
     const json = JSON.stringify(rows.length === 1 ? rows[0] : rows, null, 2);
     navigator.clipboard.writeText(json);
   }, [queryState.results]);
+
+  const rowQueryShortcuts = useMemo(() => {
+    if (contextMenu.rowIndex === null) return [];
+
+    const row = queryState.results[contextMenu.rowIndex];
+    if (!row) return [];
+
+    return buildRowQueryShortcuts(row, tableInfo);
+  }, [contextMenu.rowIndex, queryState.results, tableInfo]);
+
+  const handleOpenRowAsQuery = useCallback(async (shortcut: RowQueryShortcut) => {
+    setContextMenu({ visible: false, x: 0, y: 0, rowIndex: null });
+
+    const startTime = Date.now();
+    updateTabQueryState(tab.id, {
+      selectedIndex: shortcut.indexName,
+      pkValue: shortcut.pk.value,
+      scanPkPrefix: false,
+      skOperator: 'eq',
+      skValue: shortcut.sk?.value ?? '',
+      skValue2: '',
+      filters: [],
+      isLoading: true,
+      error: null,
+      results: [],
+      count: 0,
+      scannedCount: 0,
+      lastEvaluatedKey: undefined,
+      queryStartTime: startTime,
+      queryElapsedMs: 0,
+      lastOperation: 'query',
+    });
+
+    let accumulatedItems: Record<string, unknown>[] = [];
+    let currentQueryId: string | undefined;
+
+    const unsubscribeStart = window.dynomite.onQueryStarted(({ queryId }) => {
+      currentQueryId = queryId;
+      updateTabQueryState(tab.id, { currentQueryId: queryId });
+    });
+
+    const unsubscribe = window.dynomite.onQueryProgress((progress) => {
+      if (progress.queryId && currentQueryId && progress.queryId !== currentQueryId) {
+        return;
+      }
+      if (progress.items && progress.items.length > 0) {
+        accumulatedItems = [...accumulatedItems, ...progress.items];
+      }
+      updateTabQueryState(tab.id, {
+        results: accumulatedItems,
+        count: progress.count,
+        scannedCount: progress.scannedCount,
+        queryElapsedMs: progress.elapsedMs,
+        isFetchingMore: !progress.isComplete,
+        isLoading: !progress.isComplete,
+        currentQueryId: progress.isComplete ? undefined : progress.queryId,
+      });
+    });
+
+    try {
+      const params: QueryParams = {
+        tableName: tableInfo.tableName,
+        indexName: shortcut.indexName || undefined,
+        keyCondition: {
+          pk: shortcut.pk,
+        },
+        scanIndexForward: queryState.scanForward,
+      };
+
+      if (shortcut.sk) {
+        params.keyCondition.sk = {
+          name: shortcut.sk.name,
+          operator: 'eq',
+          value: shortcut.sk.value,
+          valueType: shortcut.sk.valueType,
+        };
+      }
+
+      const result = await window.dynomite.queryTableBatch(tab.profileName, params, queryState.maxResults);
+
+      updateTabQueryState(tab.id, {
+        results: result.items,
+        count: result.count,
+        scannedCount: result.scannedCount,
+        lastEvaluatedKey: result.lastEvaluatedKey,
+        isLoading: false,
+        isFetchingMore: false,
+        queryElapsedMs: result.elapsedMs,
+      });
+    } catch (error) {
+      updateTabQueryState(tab.id, {
+        error: (error as Error).message,
+        isLoading: false,
+        isFetchingMore: false,
+        queryElapsedMs: Date.now() - startTime,
+        currentQueryId: undefined,
+      });
+    } finally {
+      unsubscribe();
+      unsubscribeStart();
+    }
+  }, [queryState.maxResults, queryState.scanForward, tab.id, tab.profileName, tableInfo.tableName, updateTabQueryState]);
 
   // Get all field names from results (sample first 100 for performance - DynamoDB items have consistent schema)
   const allFieldNames = useMemo(() => {
@@ -1590,7 +1825,7 @@ const TabResultsTable = memo(function TabResultsTable({ tab, tableInfo, onFetchM
       if (allErrors.length === 0) {
         // Apply changes locally to results instead of clearing them
         // This keeps the data in sync without needing a re-query
-        let updatedResults = [...queryState.results];
+        const updatedResults = [...queryState.results];
 
         // First, apply updates and pk-changes (don't change array length)
         for (const change of changes) {
@@ -1967,6 +2202,29 @@ const TabResultsTable = memo(function TabResultsTable({ tab, tableInfo, onFetchM
                   Edit as JSON
                 </span>
               </button>
+              <div className="border-t my-1" />
+            </>
+          )}
+
+          {/* Open row keys as query */}
+          {selectedRows.size <= 1 && rowQueryShortcuts.length > 0 && (
+            <>
+              <div className="px-3 py-1 text-[10px] uppercase tracking-wide text-muted-foreground">
+                Open as query
+              </div>
+              <div className="max-h-48 overflow-y-auto">
+                {rowQueryShortcuts.map((shortcut) => (
+                  <button
+                    key={shortcut.id}
+                    onClick={() => handleOpenRowAsQuery(shortcut)}
+                    className="w-full flex items-center gap-2 px-3 py-1.5 text-sm text-left hover:bg-accent transition-colors"
+                    title={shortcut.label}
+                  >
+                    <Play className="h-3.5 w-3.5 shrink-0" />
+                    <span className="truncate">{shortcut.label}</span>
+                  </button>
+                ))}
+              </div>
               <div className="border-t my-1" />
             </>
           )}

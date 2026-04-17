@@ -155,6 +155,7 @@ export interface SavedBookmark {
   // Query state to restore
   selectedIndex: string | null;
   pkValue: string;
+  scanPkPrefix?: boolean;
   skOperator: SkOperator;
   skValue: string;
   skValue2: string;

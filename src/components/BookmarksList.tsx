@@ -54,7 +54,7 @@ export function BookmarksList({ tableName }: BookmarksListProps) {
     updateTabQueryState(activeTab.id, {
       selectedIndex: bookmark.selectedIndex,
       pkValue: bookmark.pkValue,
-      scanPkPrefix: false,
+      scanPkPrefix: bookmark.scanPkPrefix ?? false,
       skOperator: bookmark.skOperator,
       skValue: bookmark.skValue,
       skValue2: bookmark.skValue2,
