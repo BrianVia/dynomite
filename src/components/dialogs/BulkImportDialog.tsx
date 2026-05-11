@@ -18,6 +18,15 @@ interface ValidationResult {
   items: Record<string, unknown>[];
 }
 
+let writeRequestCounter = 0;
+const generateWriteRequestId = () => {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return `bulk-import-${crypto.randomUUID()}`;
+  }
+  writeRequestCounter += 1;
+  return `bulk-import-${Date.now()}-${writeRequestCounter}`;
+};
+
 function validateItems(
   items: unknown,
   tableInfo: TableInfo
@@ -124,17 +133,6 @@ export function BulkImportDialog({
     }
   }, [isOpen]);
 
-  // Subscribe to write progress
-  useEffect(() => {
-    if (!isImporting) return;
-
-    const unsubscribe = window.dynomite.onWriteProgress((progress) => {
-      setImportProgress(progress);
-    });
-
-    return unsubscribe;
-  }, [isImporting]);
-
   // Parse and validate JSON when it changes
   useEffect(() => {
     if (!rawJson.trim()) {
@@ -213,6 +211,12 @@ export function BulkImportDialog({
     setIsImporting(true);
     setImportProgress(null);
     setImportResult(null);
+    const writeId = generateWriteRequestId();
+    const unsubscribe = window.dynomite.onWriteProgress((progress) => {
+      if (progress.writeId === writeId) {
+        setImportProgress(progress);
+      }
+    });
 
     try {
       // Build batch write operations
@@ -222,7 +226,7 @@ export function BulkImportDialog({
         item,
       }));
 
-      const result = await window.dynomite.batchWrite(profileName, operations);
+      const result = await window.dynomite.batchWrite(profileName, operations, writeId);
       setImportResult(result);
 
       if (result.success && result.errors.length === 0) {
@@ -239,6 +243,7 @@ export function BulkImportDialog({
         errors: [err instanceof Error ? err.message : 'Import failed'],
       });
     } finally {
+      unsubscribe();
       setIsImporting(false);
     }
   };

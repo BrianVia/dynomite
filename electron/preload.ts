@@ -44,11 +44,11 @@ const api = {
     ipcRenderer.invoke('dynamo:scan', profileName, params),
 
   // Batch operations (with progress)
-  queryTableBatch: (profileName: string, params: QueryParams, maxResults: number): Promise<BatchQueryResult> =>
-    ipcRenderer.invoke('dynamo:query-batch', profileName, params, maxResults),
+  queryTableBatch: (profileName: string, params: QueryParams, maxResults: number, requestId?: string): Promise<BatchQueryResult> =>
+    ipcRenderer.invoke('dynamo:query-batch', profileName, params, maxResults, requestId),
 
-  scanTableBatch: (profileName: string, params: ScanParams, maxResults: number): Promise<BatchQueryResult> =>
-    ipcRenderer.invoke('dynamo:scan-batch', profileName, params, maxResults),
+  scanTableBatch: (profileName: string, params: ScanParams, maxResults: number, requestId?: string): Promise<BatchQueryResult> =>
+    ipcRenderer.invoke('dynamo:scan-batch', profileName, params, maxResults, requestId),
 
   onQueryProgress: (callback: (progress: QueryProgress) => void) => {
     const handler = (_event: Electron.IpcRendererEvent, progress: QueryProgress) => callback(progress);
@@ -82,9 +82,10 @@ const api = {
 
   batchWrite: (
     profileName: string,
-    operations: BatchWriteOperation[]
+    operations: BatchWriteOperation[],
+    requestId?: string
   ): Promise<{ success: boolean; processed: number; errors: string[] }> =>
-    ipcRenderer.invoke('dynamo:batch-write', profileName, operations),
+    ipcRenderer.invoke('dynamo:batch-write', profileName, operations, requestId),
 
   onWriteProgress: (callback: (progress: WriteProgress) => void) => {
     const handler = (_event: Electron.IpcRendererEvent, progress: WriteProgress) => callback(progress);

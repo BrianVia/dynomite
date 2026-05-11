@@ -123,6 +123,7 @@ export interface BatchWriteOperation {
 }
 
 export interface WriteProgress {
+  writeId?: string;
   processed: number;
   total: number;
 }
@@ -175,8 +176,8 @@ declare global {
       describeTable: (profileName: string, tableName: string) => Promise<TableInfo>;
       queryTable: (profileName: string, params: QueryParams) => Promise<QueryResult>;
       scanTable: (profileName: string, params: ScanParams) => Promise<QueryResult>;
-      queryTableBatch: (profileName: string, params: QueryParams, maxResults: number) => Promise<BatchQueryResult>;
-      scanTableBatch: (profileName: string, params: ScanParams, maxResults: number) => Promise<BatchQueryResult>;
+      queryTableBatch: (profileName: string, params: QueryParams, maxResults: number, requestId?: string) => Promise<BatchQueryResult>;
+      scanTableBatch: (profileName: string, params: ScanParams, maxResults: number, requestId?: string) => Promise<BatchQueryResult>;
       onQueryProgress: (callback: (progress: QueryProgress) => void) => () => void;
       onQueryStarted: (callback: (data: { queryId: string }) => void) => () => void;
       cancelQuery: (queryId: string) => Promise<{ success: boolean }>;
@@ -184,7 +185,7 @@ declare global {
       putItem: (profileName: string, tableName: string, item: Record<string, unknown>) => Promise<{ success: boolean }>;
       updateItem: (profileName: string, tableName: string, key: Record<string, unknown>, updates: Record<string, unknown>) => Promise<{ success: boolean }>;
       deleteItem: (profileName: string, tableName: string, key: Record<string, unknown>) => Promise<{ success: boolean }>;
-      batchWrite: (profileName: string, operations: BatchWriteOperation[]) => Promise<{ success: boolean; processed: number; errors: string[] }>;
+      batchWrite: (profileName: string, operations: BatchWriteOperation[], requestId?: string) => Promise<{ success: boolean; processed: number; errors: string[] }>;
       onWriteProgress: (callback: (progress: WriteProgress) => void) => () => void;
       // System
       getSystemTheme: () => Promise<'light' | 'dark'>;

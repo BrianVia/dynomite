@@ -124,6 +124,7 @@ export interface BatchWriteOperation {
 }
 
 export interface WriteProgress {
+  writeId?: string;
   processed: number;
   total: number;
 }

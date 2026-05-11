@@ -265,6 +265,7 @@ export function registerIpcHandlers(): void {
   const PROGRESS_THROTTLE_MS = 150;
   const cancelledQueries = new Set<string>();
   let queryIdCounter = 0;
+  let writeIdCounter = 0;
 
   // Cancel a running query
   ipcMain.handle('dynamo:cancel-query', (_event, queryId: string) => {
@@ -272,7 +273,7 @@ export function registerIpcHandlers(): void {
     return { success: true };
   });
 
-  ipcMain.handle('dynamo:query-batch', async (event, profileName: string, params: QueryParams, maxResults: number): Promise<BatchQueryResult> => {
+  ipcMain.handle('dynamo:query-batch', async (event, profileName: string, params: QueryParams, maxResults: number, requestId?: string): Promise<BatchQueryResult> => {
     if (!validateProfileName(profileName)) {
       throw new Error('Invalid profile name');
     }
@@ -282,7 +283,7 @@ export function registerIpcHandlers(): void {
     if (!validateMaxResults(maxResults)) {
       throw new Error('Invalid max results (must be 1-100000)');
     }
-    const queryId = `query-${++queryIdCounter}`;
+    const queryId = requestId || `query-${++queryIdCounter}`;
 
     try {
       const docClient = await getDynamoDBDocClient(profileName);
@@ -303,6 +304,7 @@ export function registerIpcHandlers(): void {
           cancelledQueries.delete(queryId);
           const elapsedMs = Date.now() - startTime;
           event.sender.send('query-progress', {
+            queryId,
             count: allItems.length,
             scannedCount: totalScanned,
             elapsedMs,
@@ -375,7 +377,7 @@ export function registerIpcHandlers(): void {
     }
   });
 
-  ipcMain.handle('dynamo:scan-batch', async (event, profileName: string, params: ScanParams, maxResults: number): Promise<BatchQueryResult> => {
+  ipcMain.handle('dynamo:scan-batch', async (event, profileName: string, params: ScanParams, maxResults: number, requestId?: string): Promise<BatchQueryResult> => {
     if (!validateProfileName(profileName)) {
       throw new Error('Invalid profile name');
     }
@@ -385,7 +387,7 @@ export function registerIpcHandlers(): void {
     if (!validateMaxResults(maxResults)) {
       throw new Error('Invalid max results (must be 1-100000)');
     }
-    const queryId = `scan-${++queryIdCounter}`;
+    const queryId = requestId || `scan-${++queryIdCounter}`;
 
     try {
       const docClient = await getDynamoDBDocClient(profileName);
@@ -406,6 +408,7 @@ export function registerIpcHandlers(): void {
           cancelledQueries.delete(queryId);
           const elapsedMs = Date.now() - startTime;
           event.sender.send('query-progress', {
+            queryId,
             count: allItems.length,
             scannedCount: totalScanned,
             elapsedMs,
@@ -591,7 +594,8 @@ export function registerIpcHandlers(): void {
   ipcMain.handle('dynamo:batch-write', async (
     event,
     profileName: string,
-    operations: BatchOperation[]
+    operations: BatchOperation[],
+    requestId?: string
   ): Promise<{ success: boolean; processed: number; errors: string[] }> => {
     if (!validateProfileName(profileName)) {
       throw new Error('Invalid profile name');
@@ -606,6 +610,7 @@ export function registerIpcHandlers(): void {
       }
     }
     try {
+      const writeId = requestId || `write-${++writeIdCounter}`;
       const docClient = await getDynamoDBDocClient(profileName);
       const errors: string[] = [];
       let processed = 0;
@@ -731,6 +736,7 @@ export function registerIpcHandlers(): void {
 
         // Send progress
         event.sender.send('write-progress', {
+          writeId,
           processed,
           total: operations.length,
         });

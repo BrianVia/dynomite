@@ -11,8 +11,8 @@ const api = {
     queryTable: (profileName, params) => ipcRenderer.invoke('dynamo:query', profileName, params),
     scanTable: (profileName, params) => ipcRenderer.invoke('dynamo:scan', profileName, params),
     // Batch operations (with progress)
-    queryTableBatch: (profileName, params, maxResults) => ipcRenderer.invoke('dynamo:query-batch', profileName, params, maxResults),
-    scanTableBatch: (profileName, params, maxResults) => ipcRenderer.invoke('dynamo:scan-batch', profileName, params, maxResults),
+    queryTableBatch: (profileName, params, maxResults, requestId) => ipcRenderer.invoke('dynamo:query-batch', profileName, params, maxResults, requestId),
+    scanTableBatch: (profileName, params, maxResults, requestId) => ipcRenderer.invoke('dynamo:scan-batch', profileName, params, maxResults, requestId),
     onQueryProgress: (callback) => {
         const handler = (_event, progress) => callback(progress);
         ipcRenderer.on('query-progress', handler);
@@ -28,7 +28,7 @@ const api = {
     putItem: (profileName, tableName, item) => ipcRenderer.invoke('dynamo:put-item', profileName, tableName, item),
     updateItem: (profileName, tableName, key, updates) => ipcRenderer.invoke('dynamo:update-item', profileName, tableName, key, updates),
     deleteItem: (profileName, tableName, key) => ipcRenderer.invoke('dynamo:delete-item', profileName, tableName, key),
-    batchWrite: (profileName, operations) => ipcRenderer.invoke('dynamo:batch-write', profileName, operations),
+    batchWrite: (profileName, operations, requestId) => ipcRenderer.invoke('dynamo:batch-write', profileName, operations, requestId),
     onWriteProgress: (callback) => {
         const handler = (_event, progress) => callback(progress);
         ipcRenderer.on('write-progress', handler);

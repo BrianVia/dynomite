@@ -84,6 +84,14 @@ const FILTER_OPERATORS: { value: FilterOperator; label: string; needsValue: bool
 
 let filterIdCounter = 0;
 const generateFilterId = () => `filter-${++filterIdCounter}`;
+let queryRequestCounter = 0;
+const generateQueryRequestId = (prefix: string) => {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return `${prefix}-${crypto.randomUUID()}`;
+  }
+  queryRequestCounter += 1;
+  return `${prefix}-${Date.now()}-${queryRequestCounter}`;
+};
 
 function formatBytes(bytes: number | undefined): string {
   if (bytes === undefined) return '-';
@@ -659,6 +667,7 @@ const TabQueryBuilder = memo(function TabQueryBuilder({ tab, tableInfo }: TabQue
     if (!profileName || !localPkValue.trim()) return;
 
     const startTime = Date.now();
+    const currentQueryId = generateQueryRequestId('query');
     updateTabQueryState(tab.id, {
       // Persist local values to store
       pkValue: localPkValue,
@@ -674,24 +683,17 @@ const TabQueryBuilder = memo(function TabQueryBuilder({ tab, tableInfo }: TabQue
       queryStartTime: startTime,
       queryElapsedMs: 0,
       lastOperation: 'query',
+      currentQueryId,
     });
 
     // Accumulate items from progress events for streaming display
     let accumulatedItems: Record<string, unknown>[] = [];
-    // Track the queryId for this specific query to filter progress events
-    let currentQueryId: string | undefined;
-
-    // Listen for query start to capture query ID for cancellation
-    const unsubscribeStart = window.dynomite.onQueryStarted(({ queryId }) => {
-      currentQueryId = queryId;
-      updateTabQueryState(tab.id, { currentQueryId: queryId });
-    });
 
     // Listen for progress updates from backend - stream items as they arrive
     // Only process events that match this tab's query ID to avoid race conditions
     const unsubscribe = window.dynomite.onQueryProgress((progress) => {
       // Filter: only process progress for this tab's current query
-      if (progress.queryId && currentQueryId && progress.queryId !== currentQueryId) {
+      if (progress.queryId !== currentQueryId) {
         return; // Ignore progress from other tabs' queries
       }
       if (progress.items && progress.items.length > 0) {
@@ -730,7 +732,7 @@ const TabQueryBuilder = memo(function TabQueryBuilder({ tab, tableInfo }: TabQue
         };
       }
 
-      const result = await window.dynomite.queryTableBatch(profileName, params, queryState.maxResults);
+      const result = await window.dynomite.queryTableBatch(profileName, params, queryState.maxResults, currentQueryId);
 
       // Final update with complete results (in case any items weren't sent via progress)
       updateTabQueryState(tab.id, {
@@ -752,7 +754,6 @@ const TabQueryBuilder = memo(function TabQueryBuilder({ tab, tableInfo }: TabQue
       });
     } finally {
       unsubscribe();
-      unsubscribeStart();
     }
   };
 
@@ -769,6 +770,7 @@ const TabQueryBuilder = memo(function TabQueryBuilder({ tab, tableInfo }: TabQue
     }
 
     const startTime = Date.now();
+    const currentQueryId = generateQueryRequestId('scan');
     updateTabQueryState(tab.id, {
       // Persist local values to store (useful for PK prefix scan + fetch more)
       pkValue: localPkValue,
@@ -783,24 +785,17 @@ const TabQueryBuilder = memo(function TabQueryBuilder({ tab, tableInfo }: TabQue
       queryStartTime: startTime,
       queryElapsedMs: 0,
       lastOperation: 'scan',
+      currentQueryId,
     });
 
     // Accumulate items from progress events for streaming display
     let accumulatedItems: Record<string, unknown>[] = [];
-    // Track the queryId for this specific scan to filter progress events
-    let currentQueryId: string | undefined;
-
-    // Listen for query start to capture query ID for cancellation
-    const unsubscribeStart = window.dynomite.onQueryStarted(({ queryId }) => {
-      currentQueryId = queryId;
-      updateTabQueryState(tab.id, { currentQueryId: queryId });
-    });
 
     // Listen for progress updates from backend - stream items as they arrive
     // Only process events that match this tab's query ID to avoid race conditions
     const unsubscribe = window.dynomite.onQueryProgress((progress) => {
       // Filter: only process progress for this tab's current query
-      if (progress.queryId && currentQueryId && progress.queryId !== currentQueryId) {
+      if (progress.queryId !== currentQueryId) {
         return; // Ignore progress from other tabs' queries
       }
       if (progress.items && progress.items.length > 0) {
@@ -837,7 +832,7 @@ const TabQueryBuilder = memo(function TabQueryBuilder({ tab, tableInfo }: TabQue
         tableName: tableInfo.tableName,
         indexName: queryState.selectedIndex || undefined,
         filters: scanFilters.length > 0 ? scanFilters : undefined,
-      }, queryState.maxResults);
+      }, queryState.maxResults, currentQueryId);
 
       // Final update with complete results (in case any items weren't sent via progress)
       updateTabQueryState(tab.id, {
@@ -859,7 +854,6 @@ const TabQueryBuilder = memo(function TabQueryBuilder({ tab, tableInfo }: TabQue
       });
     } finally {
       unsubscribe();
-      unsubscribeStart();
     }
   };
 
@@ -1444,6 +1438,7 @@ const TabResultsTable = memo(function TabResultsTable({ tab, tableInfo, onFetchM
     setContextMenu({ visible: false, x: 0, y: 0, rowIndex: null });
 
     const startTime = Date.now();
+    const currentQueryId = generateQueryRequestId('row-query');
     updateTabQueryState(tab.id, {
       selectedIndex: shortcut.indexName,
       pkValue: shortcut.pk.value,
@@ -1461,18 +1456,13 @@ const TabResultsTable = memo(function TabResultsTable({ tab, tableInfo, onFetchM
       queryStartTime: startTime,
       queryElapsedMs: 0,
       lastOperation: 'query',
+      currentQueryId,
     });
 
     let accumulatedItems: Record<string, unknown>[] = [];
-    let currentQueryId: string | undefined;
-
-    const unsubscribeStart = window.dynomite.onQueryStarted(({ queryId }) => {
-      currentQueryId = queryId;
-      updateTabQueryState(tab.id, { currentQueryId: queryId });
-    });
 
     const unsubscribe = window.dynomite.onQueryProgress((progress) => {
-      if (progress.queryId && currentQueryId && progress.queryId !== currentQueryId) {
+      if (progress.queryId !== currentQueryId) {
         return;
       }
       if (progress.items && progress.items.length > 0) {
@@ -1508,7 +1498,7 @@ const TabResultsTable = memo(function TabResultsTable({ tab, tableInfo, onFetchM
         };
       }
 
-      const result = await window.dynomite.queryTableBatch(tab.profileName, params, queryState.maxResults);
+      const result = await window.dynomite.queryTableBatch(tab.profileName, params, queryState.maxResults, currentQueryId);
 
       updateTabQueryState(tab.id, {
         results: result.items,
@@ -1529,7 +1519,6 @@ const TabResultsTable = memo(function TabResultsTable({ tab, tableInfo, onFetchM
       });
     } finally {
       unsubscribe();
-      unsubscribeStart();
     }
   }, [queryState.maxResults, queryState.scanForward, tab.id, tab.profileName, tableInfo.tableName, updateTabQueryState]);
 
@@ -1663,6 +1652,13 @@ const TabResultsTable = memo(function TabResultsTable({ tab, tableInfo, onFetchM
   });
 
   const rows = table.getRowModel().rows;
+  const visibleRowIndexByOriginalIndex = useMemo(() => {
+    const indexByOriginalIndex = new Map<number, number>();
+    rows.forEach((row, visibleIndex) => {
+      indexByOriginalIndex.set(row.index, visibleIndex);
+    });
+    return indexByOriginalIndex;
+  }, [rows]);
 
   const rowVirtualizer = useVirtualizer({
     count: rows.length,
@@ -1714,12 +1710,21 @@ const TabResultsTable = memo(function TabResultsTable({ tab, tableInfo, onFetchM
         return next;
       });
     } else if (e.shiftKey && lastSelectedRow !== null) {
-      // Range select
-      const start = Math.min(lastSelectedRow, rowIndex);
-      const end = Math.max(lastSelectedRow, rowIndex);
+      // Range select in the current visible table order, while storing original row indices.
+      const lastVisibleIndex = visibleRowIndexByOriginalIndex.get(lastSelectedRow);
+      const currentVisibleIndex = visibleRowIndexByOriginalIndex.get(rowIndex);
+
+      if (lastVisibleIndex === undefined || currentVisibleIndex === undefined) {
+        setSelectedRows(new Set([rowIndex]));
+        setLastSelectedRow(rowIndex);
+        return;
+      }
+
+      const start = Math.min(lastVisibleIndex, currentVisibleIndex);
+      const end = Math.max(lastVisibleIndex, currentVisibleIndex);
       const range = new Set<number>();
       for (let i = start; i <= end; i++) {
-        range.add(i);
+        range.add(rows[i].index);
       }
       setSelectedRows(range);
     } else {
@@ -1727,7 +1732,7 @@ const TabResultsTable = memo(function TabResultsTable({ tab, tableInfo, onFetchM
       setSelectedRows(new Set([rowIndex]));
     }
     setLastSelectedRow(rowIndex);
-  }, [lastSelectedRow]);
+  }, [lastSelectedRow, rows, visibleRowIndexByOriginalIndex]);
 
   const handleContextMenu = useCallback((e: React.MouseEvent, rowIndex: number, cellValue?: string, columnId?: string) => {
     e.preventDefault();
@@ -1812,7 +1817,11 @@ const TabResultsTable = memo(function TabResultsTable({ tab, tableInfo, onFetchM
 
       // Execute batch operations (deletes and pk-changes)
       if (operations.length > 0) {
-        const batchResult = await window.dynomite.batchWrite(selectedProfile.name, operations);
+        const batchResult = await window.dynomite.batchWrite(
+          selectedProfile.name,
+          operations,
+          generateQueryRequestId('write')
+        );
 
         // Check for errors in batch write result
         if (batchResult.errors && batchResult.errors.length > 0) {
@@ -2599,20 +2608,14 @@ export function TabContent() {
 
     // Accumulate new items from progress events
     let accumulatedItems: Record<string, unknown>[] = [...existingResults];
-    // Track the queryId for this specific fetch to filter progress events
-    let currentFetchQueryId: string | undefined;
-
-    // Listen for query start to capture query ID
-    const unsubscribeStart = window.dynomite.onQueryStarted(({ queryId }) => {
-      currentFetchQueryId = queryId;
-      updateTabQueryState(activeTab.id, { currentQueryId: queryId });
-    });
+    const currentFetchQueryId = generateQueryRequestId('fetch-more');
+    updateTabQueryState(activeTab.id, { currentQueryId: currentFetchQueryId });
 
     // Listen for progress updates from backend - stream items as they arrive
     // Only process events that match this tab's query ID to avoid race conditions
     const unsubscribe = window.dynomite.onQueryProgress((progress) => {
       // Filter: only process progress for this tab's current query
-      if (progress.queryId && currentFetchQueryId && progress.queryId !== currentFetchQueryId) {
+      if (progress.queryId !== currentFetchQueryId) {
         return; // Ignore progress from other tabs' queries
       }
       if (progress.items && progress.items.length > 0) {
@@ -2655,7 +2658,7 @@ export function TabContent() {
           };
         }
 
-        const result = await window.dynomite.queryTableBatch(activeTab.profileName, params, queryState.maxResults);
+        const result = await window.dynomite.queryTableBatch(activeTab.profileName, params, queryState.maxResults, currentFetchQueryId);
 
         // Final update with complete results
         updateTabQueryState(activeTab.id, {
@@ -2697,7 +2700,7 @@ export function TabContent() {
           indexName: queryState.selectedIndex || undefined,
           filters: scanFilters.length > 0 ? scanFilters : undefined,
           exclusiveStartKey: queryState.lastEvaluatedKey,
-        }, queryState.maxResults);
+        }, queryState.maxResults, currentFetchQueryId);
 
         // Final update with complete results
         updateTabQueryState(activeTab.id, {
@@ -2718,7 +2721,6 @@ export function TabContent() {
       });
     } finally {
       unsubscribe();
-      unsubscribeStart();
     }
   }, [activeTab, tableInfo, updateTabQueryState]);
 
@@ -2742,6 +2744,7 @@ export function TabContent() {
       // Execute initial scan using batch API
       const executeInitialScan = async () => {
         const startTime = Date.now();
+        const currentScanQueryId = generateQueryRequestId('initial-scan');
         updateTabQueryState(activeTab.id, {
           isLoading: true,
           error: null,
@@ -2752,24 +2755,17 @@ export function TabContent() {
           queryStartTime: startTime,
           queryElapsedMs: 0,
           lastOperation: 'scan',
+          currentQueryId: currentScanQueryId,
         });
 
         // Accumulate items from progress events for streaming display
         let accumulatedItems: Record<string, unknown>[] = [];
-        // Track the queryId for this specific scan to filter progress events
-        let currentScanQueryId: string | undefined;
-
-        // Listen for query start to capture query ID
-        const unsubscribeStart = window.dynomite.onQueryStarted(({ queryId }) => {
-          currentScanQueryId = queryId;
-          updateTabQueryState(activeTab.id, { currentQueryId: queryId });
-        });
 
         // Listen for progress updates from backend - stream items as they arrive
         // Only process events that match this tab's query ID to avoid race conditions
         const unsubscribe = window.dynomite.onQueryProgress((progress) => {
           // Filter: only process progress for this tab's current query
-          if (progress.queryId && currentScanQueryId && progress.queryId !== currentScanQueryId) {
+          if (progress.queryId !== currentScanQueryId) {
             return; // Ignore progress from other tabs' queries
           }
           if (progress.items && progress.items.length > 0) {
@@ -2789,7 +2785,7 @@ export function TabContent() {
         try {
           const result = await window.dynomite.scanTableBatch(activeTab.profileName, {
             tableName: activeTab.tableInfo!.tableName,
-          }, INITIAL_SCAN_LIMIT);
+          }, INITIAL_SCAN_LIMIT, currentScanQueryId);
 
           // Final update with complete results (in case any items weren't sent via progress)
           updateTabQueryState(activeTab.id, {
@@ -2811,7 +2807,6 @@ export function TabContent() {
           });
         } finally {
           unsubscribe();
-          unsubscribeStart();
         }
       };
       executeInitialScan();

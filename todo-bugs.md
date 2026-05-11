@@ -4,15 +4,15 @@
 
 | # | Bug | Severity | Status |
 |---|-----|----------|--------|
-| 1 | Query Progress Events Unscoped | Critical | ⏳ Pending |
-| 2 | Numeric Query Params Broken | Critical | ⏳ Pending |
+| 1 | Query Progress Events Unscoped | Critical | ✅ Fixed |
+| 2 | Numeric Query Params Broken | Critical | ✅ Fixed |
 | 3 | ExportDialog setState During Render | Medium | ✅ Fixed |
 | 4 | SSO Shell Injection Vulnerability | Critical | ✅ Fixed |
 | 5 | Auto-Updater Config Contradiction | Low | ✅ Fixed |
-| 6 | Table Open No Error Handling | Medium | ⏳ Pending |
-| 7 | Pending Changes Ignores Failures | High | ⏳ Pending |
+| 6 | Table Open No Error Handling | Medium | ✅ Fixed |
+| 7 | Pending Changes Ignores Failures | High | ✅ Fixed |
 | 8 | Default Profile Not Loaded | Medium | ✅ Fixed |
-| 9 | Batch Writes Drop Items | High | ⏳ Pending |
+| 9 | Batch Writes Drop Items | High | ✅ Fixed |
 
 ---
 
@@ -20,7 +20,7 @@
 
 ### 1. Query Progress Events Are Unscoped (Race Condition)
 **Severity:** Critical
-**Status:** Plan Ready
+**Status:** ✅ Fixed
 **Files:** `src/components/TabContent.tsx`, `electron/ipc/handlers.ts`
 
 **Problem:** `query-progress`/`write-progress` events are globally broadcasted without scoping. Running two queries in parallel will interleave progress and items across tabs, corrupting result sets.
@@ -34,7 +34,7 @@
 
 ### 2. Query Params Force Strings (Numeric Keys Broken)
 **Severity:** Critical
-**Status:** Plan Ready
+**Status:** ✅ Fixed
 **Files:** `src/types/index.ts`, `src/components/TabContent.tsx`, `electron/types.ts`
 
 **Problem:** All query params forced to strings. Numeric PK/SK values sent as strings, causing queries on numeric keys to fail.
@@ -98,7 +98,7 @@ const process = spawn('aws', ['sso', 'login', '--profile', profileName], {
 
 ### 6. Table Open Has No Error Handling
 **Severity:** Medium
-**Status:** Plan Ready
+**Status:** ✅ Fixed
 **Files:** `src/components/TableList.tsx:94-124`
 
 **Problem:** `describeTable` calls have no try/catch. Auth/network failures throw unhandled rejections.
@@ -112,7 +112,7 @@ const process = spawn('aws', ['sso', 'login', '--profile', profileName], {
 
 ### 7. Pending Changes Ignores Failures
 **Severity:** High
-**Status:** Plan Ready
+**Status:** ✅ Fixed
 **Files:** `src/components/TabContent.tsx:1317-1378`
 
 **Problem:** `handleApplyChanges` swallows errors, clears changes even on failure, users think writes succeeded.
@@ -145,7 +145,7 @@ if (key.startsWith('profile ')) {
 
 ### 9. Batch Writes Drop Items Silently
 **Severity:** High
-**Status:** Plan Ready
+**Status:** ✅ Fixed
 **Files:** `electron/ipc/handlers.ts:304-378`
 
 **Problem:** Batch writes execute one-by-one (not batched), no retry for unprocessed items, throttling causes silent data loss.

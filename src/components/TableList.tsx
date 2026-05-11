@@ -51,6 +51,8 @@ export function TableList() {
 
   const [searchQuery, setSearchQuery] = useState('');
   const [loggingIn, setLoggingIn] = useState(false);
+  const [openingTableName, setOpeningTableName] = useState<string | null>(null);
+  const [describeTableError, setDescribeTableError] = useState<string | null>(null);
   const [contextMenu, setContextMenu] = useState<ContextMenuState>({
     visible: false,
     x: 0,
@@ -91,12 +93,29 @@ export function TableList() {
     }
   };
 
-  const handleTableClick = async (tableName: string) => {
+  const openTable = async (tableName: string, inBackground = false) => {
     if (!profileName) return;
+    setOpeningTableName(tableName);
+    setDescribeTableError(null);
+    try {
+      const tableInfo = await window.dynomite.describeTable(profileName, tableName);
+      if (inBackground) {
+        openTabInBackground(tableName, tableInfo, profileName);
+      } else {
+        openTab(tableName, tableInfo, profileName);
+        selectTable(profileName, tableName);
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      setDescribeTableError(`Failed to open ${tableName}: ${message}`);
+    } finally {
+      setOpeningTableName(null);
+    }
+  };
+
+  const handleTableClick = async (tableName: string) => {
     // Regular click opens in current/new active tab
-    const tableInfo = await window.dynomite.describeTable(profileName, tableName);
-    openTab(tableName, tableInfo, profileName);
-    selectTable(profileName, tableName);
+    await openTable(tableName);
   };
 
   const handleContextMenu = (e: React.MouseEvent, tableName: string) => {
@@ -111,16 +130,13 @@ export function TableList() {
 
   const handleOpenInNewTab = async () => {
     if (!contextMenu.tableName || !profileName) return;
-    const tableInfo = await window.dynomite.describeTable(profileName, contextMenu.tableName);
-    openTabInBackground(contextMenu.tableName, tableInfo, profileName);
+    await openTable(contextMenu.tableName, true);
     setContextMenu({ visible: false, x: 0, y: 0, tableName: null });
   };
 
   const handleOpenInCurrentTab = async () => {
     if (!contextMenu.tableName || !profileName) return;
-    const tableInfo = await window.dynomite.describeTable(profileName, contextMenu.tableName);
-    openTab(contextMenu.tableName, tableInfo, profileName);
-    selectTable(profileName, contextMenu.tableName);
+    await openTable(contextMenu.tableName);
     setContextMenu({ visible: false, x: 0, y: 0, tableName: null });
   };
 
@@ -211,9 +227,9 @@ export function TableList() {
       </div>
 
       {/* Error state */}
-      {error && (
+      {(error || describeTableError) && (
         <div className="px-3 py-2 text-sm text-red-500 bg-red-500/10 border-b">
-          {error}
+          {describeTableError || error}
         </div>
       )}
 
@@ -242,14 +258,20 @@ export function TableList() {
                   key={tableName}
                   onClick={() => handleTableClick(tableName)}
                   onContextMenu={(e) => handleContextMenu(e, tableName)}
+                  disabled={openingTableName !== null}
                   className={cn(
                     'w-full flex items-center gap-2 px-3 py-2 rounded-md text-left transition-colors',
+                    openingTableName !== null && 'cursor-wait opacity-70',
                     isSelected
                       ? 'bg-accent text-accent-foreground'
                       : 'hover:bg-accent/50'
                   )}
                 >
-                  <Database className="h-4 w-4 shrink-0 text-muted-foreground" />
+                  {openingTableName === tableName ? (
+                    <Loader2 className="h-4 w-4 shrink-0 text-muted-foreground animate-spin" />
+                  ) : (
+                    <Database className="h-4 w-4 shrink-0 text-muted-foreground" />
+                  )}
                   <div className="min-w-0 flex-1">
                     <div className="text-sm font-medium truncate">
                       {stack && (
@@ -283,12 +305,14 @@ export function TableList() {
         >
           <button
             onClick={handleOpenInCurrentTab}
+            disabled={openingTableName !== null}
             className="w-full px-3 py-1.5 text-sm text-left hover:bg-accent transition-colors"
           >
             Open
           </button>
           <button
             onClick={handleOpenInNewTab}
+            disabled={openingTableName !== null}
             className="w-full px-3 py-1.5 text-sm text-left hover:bg-accent transition-colors"
           >
             Open in New Tab
