@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.9.1](https://github.com/BrianVia/dynomite/compare/v1.9.0...v1.9.1) (2026-05-11)
+
+
+### Bug Fixes
+
+* scope progress events and table open errors ([262946e](https://github.com/BrianVia/dynomite/commit/262946e2e2ee173b7b65d78e1e93a3f42ad95b8f))
+
 ## [1.9.0](https://github.com/BrianVia/dynomite/compare/v1.8.0...v1.9.0) (2026-04-17)
 
 
