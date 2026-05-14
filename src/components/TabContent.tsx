@@ -1716,6 +1716,12 @@ const TabResultsTable = memo(function TabResultsTable({ tab, tableInfo, onFetchM
     setDraggedColumn(null);
   }, []);
 
+  const handleRowMouseDown = useCallback((e: React.MouseEvent) => {
+    if (e.shiftKey) {
+      e.preventDefault();
+    }
+  }, []);
+
   const handleRowClick = useCallback((e: React.MouseEvent, rowIndex: number) => {
     if (e.metaKey || e.ctrlKey) {
       // Toggle selection
@@ -1729,6 +1735,8 @@ const TabResultsTable = memo(function TabResultsTable({ tab, tableInfo, onFetchM
         return next;
       });
     } else if (e.shiftKey && lastSelectedRow !== null) {
+      window.getSelection()?.removeAllRanges();
+
       // Range select in the current visible table order, while storing original row indices.
       const lastVisibleIndex = visibleRowIndexByOriginalIndex.get(lastSelectedRow);
       const currentVisibleIndex = visibleRowIndexByOriginalIndex.get(rowIndex);
@@ -2069,6 +2077,7 @@ const TabResultsTable = memo(function TabResultsTable({ tab, tableInfo, onFetchM
                   <tr
                     key={row.id}
                     data-index={virtualRow.index}
+                    onMouseDown={handleRowMouseDown}
                     onClick={(e) => handleRowClick(e, originalIndex)}
                     className={cn(
                       'border-b last:border-0 transition-colors cursor-pointer',
