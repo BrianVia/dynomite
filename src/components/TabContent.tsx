@@ -1,4 +1,4 @@
-import { useEffect, useRef, useMemo, useState, useCallback, memo } from 'react';
+import { useEffect, useLayoutEffect, useRef, useMemo, useState, useCallback, memo } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import {
   useReactTable,
@@ -55,6 +55,7 @@ import { BulkImportDialog } from './dialogs/BulkImportDialog';
 import { useTabsStore, type Tab } from '@/stores/tabs-store';
 import { useProfileStore } from '@/stores/profile-store';
 import { usePendingChangesStore, type PendingChange } from '@/stores/pending-changes-store';
+import { clampContextMenuPosition } from '@/lib/context-menu-position';
 import { cn } from '@/lib/utils';
 import type { TableInfo, SkOperator, QueryParams, FilterOperator, FilterCondition, BatchWriteOperation } from '@/types';
 
@@ -1393,6 +1394,24 @@ const TabResultsTable = memo(function TabResultsTable({ tab, tableInfo, onFetchM
     }
   }, [contextMenu.visible]);
 
+  useLayoutEffect(() => {
+    if (!contextMenu.visible || !contextMenuRef.current) return;
+
+    const nextPosition = clampContextMenuPosition(
+      contextMenu.x,
+      contextMenu.y,
+      contextMenuRef.current.getBoundingClientRect()
+    );
+
+    if (nextPosition.x !== contextMenu.x || nextPosition.y !== contextMenu.y) {
+      setContextMenu((current) => ({
+        ...current,
+        x: nextPosition.x,
+        y: nextPosition.y,
+      }));
+    }
+  }, [contextMenu.visible, contextMenu.x, contextMenu.y]);
+
   // Toggle column visibility
   const toggleColumnVisibility = useCallback((columnId: string) => {
     setHiddenColumns(prev => {
@@ -2181,7 +2200,7 @@ const TabResultsTable = memo(function TabResultsTable({ tab, tableInfo, onFetchM
       {contextMenu.visible && (
         <div
           ref={contextMenuRef}
-          className="fixed z-50 min-w-[200px] bg-popover border rounded-md shadow-lg py-1"
+          className="fixed z-50 min-w-[200px] max-h-[calc(100vh-16px)] overflow-y-auto overscroll-contain bg-popover border rounded-md shadow-lg py-1"
           style={{ left: contextMenu.x, top: contextMenu.y }}
         >
           {/* Edit options - first like Dynobase */}

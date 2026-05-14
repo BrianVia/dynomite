@@ -1,6 +1,7 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useLayoutEffect } from 'react';
 import { Bookmark, ChevronDown, ChevronRight, Trash2, Pencil, Play } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { clampContextMenuPosition } from '@/lib/context-menu-position';
 import { useBookmarksStore } from '@/stores/bookmarks-store';
 import { useTabsStore } from '@/stores/tabs-store';
 import { SaveBookmarkDialog } from './dialogs/SaveBookmarkDialog';
@@ -46,6 +47,24 @@ export function BookmarksList({ tableName }: BookmarksListProps) {
       return () => document.removeEventListener('mousedown', handleClickOutside);
     }
   }, [contextMenu.visible]);
+
+  useLayoutEffect(() => {
+    if (!contextMenu.visible || !contextMenuRef.current) return;
+
+    const nextPosition = clampContextMenuPosition(
+      contextMenu.x,
+      contextMenu.y,
+      contextMenuRef.current.getBoundingClientRect()
+    );
+
+    if (nextPosition.x !== contextMenu.x || nextPosition.y !== contextMenu.y) {
+      setContextMenu((current) => ({
+        ...current,
+        x: nextPosition.x,
+        y: nextPosition.y,
+      }));
+    }
+  }, [contextMenu.visible, contextMenu.x, contextMenu.y]);
 
   const handleLoadBookmark = (bookmark: SavedBookmark) => {
     const activeTab = getActiveTab();
@@ -163,7 +182,7 @@ export function BookmarksList({ tableName }: BookmarksListProps) {
       {contextMenu.visible && (
         <div
           ref={contextMenuRef}
-          className="fixed z-50 min-w-[160px] bg-popover border rounded-md shadow-lg py-1"
+          className="fixed z-50 min-w-[160px] max-h-[calc(100vh-16px)] overflow-y-auto overscroll-contain bg-popover border rounded-md shadow-lg py-1"
           style={{ left: contextMenu.x, top: contextMenu.y }}
         >
           <button

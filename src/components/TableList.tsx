@@ -1,6 +1,7 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useLayoutEffect } from 'react';
 import { Database, Loader2, Search, RefreshCw, AlertCircle, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { clampContextMenuPosition } from '@/lib/context-menu-position';
 import { Button } from './ui/button';
 import { useProfileStore } from '@/stores/profile-store';
 import { useTableStore } from '@/stores/table-store';
@@ -154,6 +155,24 @@ export function TableList() {
     }
   }, [contextMenu.visible]);
 
+  useLayoutEffect(() => {
+    if (!contextMenu.visible || !contextMenuRef.current) return;
+
+    const nextPosition = clampContextMenuPosition(
+      contextMenu.x,
+      contextMenu.y,
+      contextMenuRef.current.getBoundingClientRect()
+    );
+
+    if (nextPosition.x !== contextMenu.x || nextPosition.y !== contextMenu.y) {
+      setContextMenu((current) => ({
+        ...current,
+        x: nextPosition.x,
+        y: nextPosition.y,
+      }));
+    }
+  }, [contextMenu.visible, contextMenu.x, contextMenu.y]);
+
   // Close context menu on scroll
   useEffect(() => {
     const handleScroll = () => {
@@ -300,7 +319,7 @@ export function TableList() {
       {contextMenu.visible && (
         <div
           ref={contextMenuRef}
-          className="fixed z-50 min-w-[160px] bg-popover border rounded-md shadow-md py-1 context-menu-enter"
+          className="fixed z-50 min-w-[160px] max-h-[calc(100vh-16px)] overflow-y-auto overscroll-contain bg-popover border rounded-md shadow-md py-1 context-menu-enter"
           style={{ left: contextMenu.x, top: contextMenu.y }}
         >
           <button
