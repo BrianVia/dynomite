@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.9.3](https://github.com/BrianVia/dynomite/compare/v1.9.2...v1.9.3) (2026-05-18)
+
+
+### Bug Fixes
+
+* preserve selected rows in context menu export ([1154b2a](https://github.com/BrianVia/dynomite/commit/1154b2a289c9624fa3754f9f355d396ed88c2595))
+* prevent shift-click text selection ([ecc6d01](https://github.com/BrianVia/dynomite/commit/ecc6d0145f30c85c9e13278cf0eb9f3e792bce32))
+
 ## [1.9.2](https://github.com/BrianVia/dynomite/compare/v1.9.1...v1.9.2) (2026-05-14)
 
 
