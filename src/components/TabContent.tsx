@@ -1355,31 +1355,6 @@ const TabResultsTable = memo(function TabResultsTable({ tab, tableInfo, onFetchM
     return { cellChangesMap: cellMap, deletedRowsSet: deletedSet };
   }, [pendingChanges]);
 
-  // Keyboard shortcut for Cmd+S / Ctrl+S
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === 's') {
-        e.preventDefault();
-        if (hasPendingChanges) {
-          setShowConfirmDialog(true);
-        }
-      }
-      // Escape to clear selection
-      if (e.key === 'Escape') {
-        setSelectedRows(new Set());
-      }
-      // Cmd+A / Ctrl+A to select all (but not when in input/textarea)
-      const activeTag = document.activeElement?.tagName;
-      if ((e.metaKey || e.ctrlKey) && e.key === 'a' && activeTag !== 'INPUT' && activeTag !== 'TEXTAREA') {
-        e.preventDefault();
-        setSelectedRows(new Set(queryState.results.map((_, i) => i)));
-      }
-    };
-
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [hasPendingChanges, queryState.results.length]);
-
   // Close context menu on click outside
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -1671,6 +1646,11 @@ const TabResultsTable = memo(function TabResultsTable({ tab, tableInfo, onFetchM
   });
 
   const rows = table.getRowModel().rows;
+  const allRowIndices = useMemo(() => rows.map((row) => row.index), [rows]);
+  const selectedRowIndices = useMemo(
+    () => allRowIndices.filter((rowIndex) => selectedRows.has(rowIndex)),
+    [allRowIndices, selectedRows]
+  );
   const visibleRowIndexByOriginalIndex = useMemo(() => {
     const indexByOriginalIndex = new Map<number, number>();
     rows.forEach((row, visibleIndex) => {
@@ -1685,6 +1665,58 @@ const TabResultsTable = memo(function TabResultsTable({ tab, tableInfo, onFetchM
     estimateSize: () => 32,
     overscan: 10,
   });
+
+  // Keyboard shortcut for Cmd+S / Ctrl+S
+  useEffect(() => {
+    const isTextEditingTarget = (target: EventTarget | null) => {
+      if (!(target instanceof HTMLElement)) return false;
+      return (
+        target.isContentEditable ||
+        target.tagName === 'INPUT' ||
+        target.tagName === 'TEXTAREA' ||
+        target.tagName === 'SELECT'
+      );
+    };
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const key = e.key.toLowerCase();
+
+      if ((e.metaKey || e.ctrlKey) && key === 's') {
+        e.preventDefault();
+        if (hasPendingChanges) {
+          setShowConfirmDialog(true);
+        }
+      }
+      // Escape to clear selection
+      if (key === 'escape') {
+        setSelectedRows(new Set());
+      }
+      // Cmd+A / Ctrl+A to select all table rows while preserving normal text input behavior.
+      if ((e.metaKey || e.ctrlKey) && key === 'a' && !isTextEditingTarget(e.target)) {
+        e.preventDefault();
+        setSelectedRows(new Set(allRowIndices));
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [allRowIndices, hasPendingChanges]);
+
+  useEffect(() => {
+    setSelectedRows((previous) => {
+      if (previous.size === 0) return previous;
+
+      const validRows = new Set(allRowIndices);
+      const next = new Set<number>();
+      previous.forEach((rowIndex) => {
+        if (validRows.has(rowIndex)) {
+          next.add(rowIndex);
+        }
+      });
+
+      return next.size === previous.size ? previous : next;
+    });
+  }, [allRowIndices]);
 
   const handleDragStart = useCallback((e: React.DragEvent, columnId: string) => {
     setDraggedColumn(columnId);
@@ -1763,10 +1795,9 @@ const TabResultsTable = memo(function TabResultsTable({ tab, tableInfo, onFetchM
 
   const handleContextMenu = useCallback((e: React.MouseEvent, rowIndex: number, cellValue?: string, columnId?: string) => {
     e.preventDefault();
-    // If right-clicking on an unselected row, select it
-    if (!selectedRows.has(rowIndex)) {
-      setSelectedRows(new Set([rowIndex]));
-    }
+    // If right-clicking on an unselected row, select it. Use a functional
+    // update so a right-click immediately after Cmd+A sees the latest selection.
+    setSelectedRows((previous) => previous.has(rowIndex) ? previous : new Set([rowIndex]));
     setContextMenu({
       visible: true,
       x: e.clientX,
@@ -1775,10 +1806,10 @@ const TabResultsTable = memo(function TabResultsTable({ tab, tableInfo, onFetchM
       cellValue,
       columnId,
     });
-  }, [selectedRows]);
+  }, []);
 
   const handleDeleteRow = useCallback(() => {
-    const rowsToDelete = selectedRows.size > 0 ? Array.from(selectedRows) : contextMenu.rowIndex !== null ? [contextMenu.rowIndex] : [];
+    const rowsToDelete = selectedRows.size > 0 ? selectedRowIndices : contextMenu.rowIndex !== null ? [contextMenu.rowIndex] : [];
 
     rowsToDelete.forEach(rowIndex => {
       const rowData = queryState.results[rowIndex];
@@ -1794,7 +1825,7 @@ const TabResultsTable = memo(function TabResultsTable({ tab, tableInfo, onFetchM
 
     setContextMenu({ visible: false, x: 0, y: 0, rowIndex: null });
     setSelectedRows(new Set());
-  }, [selectedRows, contextMenu.rowIndex, queryState.results, tab.id, tableInfo, addChange]);
+  }, [selectedRows.size, selectedRowIndices, contextMenu.rowIndex, queryState.results, tab.id, tableInfo, addChange]);
 
   const handleDiscardChanges = useCallback(() => {
     clearChangesForTab(tab.id);
@@ -2337,7 +2368,7 @@ const TabResultsTable = memo(function TabResultsTable({ tab, tableInfo, onFetchM
           )}
           <button
             onClick={() => {
-              const rowsToCopy = selectedRows.size > 0 ? Array.from(selectedRows) : (contextMenu.rowIndex !== null ? [contextMenu.rowIndex] : []);
+              const rowsToCopy = selectedRows.size > 0 ? selectedRowIndices : (contextMenu.rowIndex !== null ? [contextMenu.rowIndex] : []);
               copyRowsToClipboard(rowsToCopy);
               setContextMenu({ visible: false, x: 0, y: 0, rowIndex: null });
             }}
@@ -2487,7 +2518,7 @@ const TabResultsTable = memo(function TabResultsTable({ tab, tableInfo, onFetchM
           isOpen={bulkEditField !== null}
           onClose={() => setBulkEditField(null)}
           fieldName={bulkEditField}
-          selectedRows={Array.from(selectedRows)}
+          selectedRows={selectedRowIndices}
           results={queryState.results}
           tabId={tab.id}
           tableInfo={tableInfo}
@@ -2500,7 +2531,7 @@ const TabResultsTable = memo(function TabResultsTable({ tab, tableInfo, onFetchM
           isOpen={scriptEditField !== null}
           onClose={() => setScriptEditField(null)}
           fieldName={scriptEditField}
-          selectedRows={Array.from(selectedRows)}
+          selectedRows={selectedRowIndices}
           results={queryState.results}
           tabId={tab.id}
           tableInfo={tableInfo}
@@ -2508,28 +2539,32 @@ const TabResultsTable = memo(function TabResultsTable({ tab, tableInfo, onFetchM
       )}
 
       {/* Field Picker Dialog */}
-      <FieldPickerDialog
-        isOpen={showFieldPicker}
-        onClose={() => setShowFieldPicker(false)}
-        fields={allFieldNames}
-        rowCount={selectedRows.size > 0 ? selectedRows.size : (contextMenu.rowIndex !== null ? 1 : queryState.results.length)}
-        onCopy={(selectedFields) => {
-          const rowIndices = selectedRows.size > 0
-            ? Array.from(selectedRows)
-            : (contextMenu.rowIndex !== null ? [contextMenu.rowIndex] : queryState.results.map((_, i) => i));
-          copyRowsToClipboard(rowIndices, selectedFields);
-        }}
-      />
+      {showFieldPicker && (
+        <FieldPickerDialog
+          isOpen={showFieldPicker}
+          onClose={() => setShowFieldPicker(false)}
+          fields={allFieldNames}
+          rowCount={selectedRows.size > 0 ? selectedRows.size : (contextMenu.rowIndex !== null ? 1 : queryState.results.length)}
+          onCopy={(selectedFields) => {
+            const rowIndices = selectedRows.size > 0
+              ? selectedRowIndices
+              : (contextMenu.rowIndex !== null ? [contextMenu.rowIndex] : queryState.results.map((_, i) => i));
+            copyRowsToClipboard(rowIndices, selectedFields);
+          }}
+        />
+      )}
 
       {/* Export Dialog */}
-      <ExportDialog
-        isOpen={showExportDialog}
-        onClose={() => setShowExportDialog(false)}
-        fields={allFieldNames}
-        rows={queryState.results}
-        selectedRowIndices={Array.from(selectedRows)}
-        tableName={tableInfo.tableName}
-      />
+      {showExportDialog && (
+        <ExportDialog
+          isOpen={showExportDialog}
+          onClose={() => setShowExportDialog(false)}
+          fields={allFieldNames}
+          rows={queryState.results}
+          selectedRowIndices={selectedRowIndices}
+          tableName={tableInfo.tableName}
+        />
+      )}
 
       {/* Insert Row Dialog */}
       <InsertRowDialog

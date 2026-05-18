@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useMemo } from 'react';
 import { X, Check, Download } from 'lucide-react';
 import { Button } from '../ui/button';
 import { cn } from '@/lib/utils';
@@ -32,6 +32,26 @@ function convertToCSV(rows: Record<string, unknown>[], fields: string[]): string
   return [header, ...dataRows].join('\n');
 }
 
+function getSortedFieldsFromRows(rows: Record<string, unknown>[]): string[] {
+  const fieldSet = new Set<string>();
+  rows.forEach(row => {
+    Object.keys(row).forEach(key => fieldSet.add(key));
+  });
+
+  return Array.from(fieldSet).sort((a, b) => {
+    // pk/sk pattern fields first
+    const aIsPk = a === 'pk' || a === 'PK' || a.toLowerCase().includes('partitionkey');
+    const bIsPk = b === 'pk' || b === 'PK' || b.toLowerCase().includes('partitionkey');
+    const aIsSk = a === 'sk' || a === 'SK' || a.toLowerCase().includes('sortkey');
+    const bIsSk = b === 'sk' || b === 'SK' || b.toLowerCase().includes('sortkey');
+    if (aIsPk && !bIsPk) return -1;
+    if (bIsPk && !aIsPk) return 1;
+    if (aIsSk && !bIsSk) return -1;
+    if (bIsSk && !aIsSk) return 1;
+    return a.localeCompare(b);
+  });
+}
+
 function downloadFile(content: string, filename: string, mimeType: string) {
   const blob = new Blob([content], { type: mimeType });
   const url = URL.createObjectURL(blob);
@@ -52,9 +72,14 @@ export function ExportDialog({
   selectedRowIndices,
   tableName,
 }: ExportDialogProps) {
+  const initialExportSelected = selectedRowIndices.length > 0;
+  const initialRowsToExport = initialExportSelected
+    ? selectedRowIndices.map(idx => rows[idx]).filter(Boolean)
+    : rows;
+  const initialFields = initialRowsToExport.length > 0 ? getSortedFieldsFromRows(initialRowsToExport) : fields;
   const [format, setFormat] = useState<ExportFormat>('json');
-  const [selectedFields, setSelectedFields] = useState<Set<string>>(() => new Set(fields));
-  const [exportSelected, setExportSelected] = useState(selectedRowIndices.length > 0);
+  const [selectedFields, setSelectedFields] = useState<Set<string>>(() => new Set(initialFields));
+  const [exportSelected, setExportSelected] = useState(initialExportSelected);
 
   const rowsToExport = useMemo(() =>
     exportSelected && selectedRowIndices.length > 0
@@ -65,33 +90,10 @@ export function ExportDialog({
 
   // Compute all fields from the actual rows being exported to ensure
   // nested objects and all fields are properly detected
-  const allFieldsFromRows = useMemo(() => {
-    const fieldSet = new Set<string>();
-    rowsToExport.forEach(row => {
-      Object.keys(row).forEach(key => fieldSet.add(key));
-    });
-    // Sort with common key fields first
-    return Array.from(fieldSet).sort((a, b) => {
-      // pk/sk pattern fields first
-      const aIsPk = a === 'pk' || a === 'PK' || a.toLowerCase().includes('partitionkey');
-      const bIsPk = b === 'pk' || b === 'PK' || b.toLowerCase().includes('partitionkey');
-      const aIsSk = a === 'sk' || a === 'SK' || a.toLowerCase().includes('sortkey');
-      const bIsSk = b === 'sk' || b === 'SK' || b.toLowerCase().includes('sortkey');
-      if (aIsPk && !bIsPk) return -1;
-      if (bIsPk && !aIsPk) return 1;
-      if (aIsSk && !bIsSk) return -1;
-      if (bIsSk && !aIsSk) return 1;
-      return a.localeCompare(b);
-    });
-  }, [rowsToExport]);
-
-  // Reset selection when dialog opens - use comprehensive field list
-  useEffect(() => {
-    if (isOpen) {
-      setSelectedFields(new Set(allFieldsFromRows));
-      setExportSelected(selectedRowIndices.length > 0);
-    }
-  }, [isOpen, allFieldsFromRows, selectedRowIndices.length]);
+  const allFieldsFromRows = useMemo(
+    () => rowsToExport.length > 0 ? getSortedFieldsFromRows(rowsToExport) : fields,
+    [fields, rowsToExport]
+  );
 
   const toggleField = (field: string) => {
     setSelectedFields(prev => {
@@ -107,6 +109,14 @@ export function ExportDialog({
 
   const selectAll = () => setSelectedFields(new Set(allFieldsFromRows));
   const selectNone = () => setSelectedFields(new Set());
+  const setRowsMode = (nextExportSelected: boolean) => {
+    const nextRowsToExport = nextExportSelected && selectedRowIndices.length > 0
+      ? selectedRowIndices.map(idx => rows[idx]).filter(Boolean)
+      : rows;
+
+    setExportSelected(nextExportSelected);
+    setSelectedFields(new Set(getSortedFieldsFromRows(nextRowsToExport)));
+  };
 
   const handleExport = () => {
     const fieldsArray = Array.from(selectedFields);
@@ -194,7 +204,7 @@ export function ExportDialog({
               <label className="text-sm font-medium mb-2 block">Rows</label>
               <div className="flex gap-2">
                 <button
-                  onClick={() => setExportSelected(true)}
+                  onClick={() => setRowsMode(true)}
                   className={cn(
                     'flex-1 px-3 py-2 rounded-md border text-sm transition-colors',
                     exportSelected
@@ -205,7 +215,7 @@ export function ExportDialog({
                   Selected ({selectedRowIndices.length})
                 </button>
                 <button
-                  onClick={() => setExportSelected(false)}
+                  onClick={() => setRowsMode(false)}
                   className={cn(
                     'flex-1 px-3 py-2 rounded-md border text-sm transition-colors',
                     !exportSelected

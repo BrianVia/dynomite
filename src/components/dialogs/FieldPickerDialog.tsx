@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState } from 'react';
 import { X, Check, Copy } from 'lucide-react';
 import { Button } from '../ui/button';
 import { cn } from '@/lib/utils';
@@ -19,13 +19,6 @@ export function FieldPickerDialog({
   rowCount,
 }: FieldPickerDialogProps) {
   const [selectedFields, setSelectedFields] = useState<Set<string>>(() => new Set(fields));
-
-  // Reset selection when dialog opens
-  useMemo(() => {
-    if (isOpen) {
-      setSelectedFields(new Set(fields));
-    }
-  }, [isOpen, fields]);
 
   const toggleField = (field: string) => {
     setSelectedFields(prev => {
