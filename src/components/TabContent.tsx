@@ -2218,7 +2218,7 @@ const TabResultsTable = memo(function TabResultsTable({ tab, tableInfo, onFetchM
               value={queryState.maxResults}
               onChange={(e) => updateTabQueryState(tab.id, { maxResults: Math.max(1, parseInt(e.target.value) || 1) })}
               min={1}
-              max={100000}
+              max={1000000}
               className="w-20 h-6 px-1.5 rounded border border-input bg-background text-xs focus:outline-none focus:ring-1 focus:ring-ring"
             />
           </div>
