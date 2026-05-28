@@ -165,8 +165,72 @@ interface RowQueryShortcut {
   sk?: { name: string; value: string; valueType?: 'S' | 'N' | 'B' };
 }
 
+type ColumnDropPosition = 'before' | 'after';
+
+interface ColumnDropTarget {
+  columnId: string;
+  position: ColumnDropPosition;
+}
+
 function getAttributeType(tableInfo: TableInfo, attributeName: string) {
   return tableInfo.attributeDefinitions.find((attr) => attr.attributeName === attributeName)?.attributeType;
+}
+
+function columnOrdersEqual(left: ColumnOrderState, right: ColumnOrderState): boolean {
+  return left.length === right.length && left.every((columnId, index) => columnId === right[index]);
+}
+
+function reconcileColumnOrder(currentOrder: ColumnOrderState, columnIds: string[]): ColumnOrderState {
+  if (columnIds.length === 0) return [];
+
+  const knownColumnIds = new Set(columnIds);
+  const nextOrder = currentOrder.filter((columnId) => knownColumnIds.has(columnId));
+  const orderedColumnIds = new Set(nextOrder);
+
+  columnIds.forEach((columnId) => {
+    if (!orderedColumnIds.has(columnId)) {
+      nextOrder.push(columnId);
+    }
+  });
+
+  return nextOrder;
+}
+
+function getColumnDropPosition(e: React.DragEvent<HTMLElement>): ColumnDropPosition {
+  const rect = e.currentTarget.getBoundingClientRect();
+  const halfway = rect.left + rect.width / 2;
+  return e.clientX >= halfway ? 'after' : 'before';
+}
+
+function moveColumnInOrder(
+  currentOrder: ColumnOrderState,
+  fallbackColumnIds: string[],
+  draggedColumnId: string,
+  targetColumnId: string,
+  position: ColumnDropPosition
+): ColumnOrderState {
+  if (draggedColumnId === targetColumnId) {
+    return currentOrder;
+  }
+
+  const baseOrder = currentOrder.length > 0
+    ? reconcileColumnOrder(currentOrder, fallbackColumnIds)
+    : fallbackColumnIds;
+  const draggedIndex = baseOrder.indexOf(draggedColumnId);
+  const targetIndex = baseOrder.indexOf(targetColumnId);
+
+  if (draggedIndex === -1 || targetIndex === -1) {
+    return currentOrder;
+  }
+
+  const nextOrder = [...baseOrder];
+  nextOrder.splice(draggedIndex, 1);
+
+  const adjustedTargetIndex = nextOrder.indexOf(targetColumnId);
+  const insertIndex = position === 'after' ? adjustedTargetIndex + 1 : adjustedTargetIndex;
+  nextOrder.splice(insertIndex, 0, draggedColumnId);
+
+  return nextOrder;
 }
 
 function getUsableKeyValue(
@@ -1305,6 +1369,7 @@ const TabResultsTable = memo(function TabResultsTable({ tab, tableInfo, onFetchM
   const [columnOrder, setColumnOrder] = useState<ColumnOrderState>([]);
   const [columnSizing, setColumnSizing] = useState<ColumnSizingState>({});
   const [draggedColumn, setDraggedColumn] = useState<string | null>(null);
+  const [dropTarget, setDropTarget] = useState<ColumnDropTarget | null>(null);
   const [selectedRows, setSelectedRows] = useState<Set<number>>(new Set());
   const [lastSelectedRow, setLastSelectedRow] = useState<number | null>(null);
   const [contextMenu, setContextMenu] = useState<ContextMenuState>({
@@ -1611,12 +1676,20 @@ const TabResultsTable = memo(function TabResultsTable({ tab, tableInfo, onFetchM
     }));
   }, [queryState.results, tab.id, tableInfo, pkSkAttrs, hashKeyAttr, cellChangesMap, deletedRowsSet, handleAddChange]);
 
-  // Initialize column order when columns change
+  const columnIds = useMemo(
+    () => columns
+      .map((column) => column.id)
+      .filter((columnId): columnId is string => typeof columnId === 'string'),
+    [columns]
+  );
+
+  // Keep user column order while adding/removing dynamic DynamoDB fields.
   useEffect(() => {
-    if (columns.length > 0 && columnOrder.length === 0) {
-      setColumnOrder(columns.map(c => c.id as string));
-    }
-  }, [columns.length]);
+    setColumnOrder((currentOrder) => {
+      const nextOrder = reconcileColumnOrder(currentOrder, columnIds);
+      return columnOrdersEqual(currentOrder, nextOrder) ? currentOrder : nextOrder;
+    });
+  }, [columnIds]);
 
   // Convert hiddenColumns Set to VisibilityState
   const columnVisibility = useMemo<VisibilityState>(() => {
@@ -1718,34 +1791,57 @@ const TabResultsTable = memo(function TabResultsTable({ tab, tableInfo, onFetchM
     });
   }, [allRowIndices]);
 
-  const handleDragStart = useCallback((e: React.DragEvent, columnId: string) => {
+  const handleColumnDragStart = useCallback((e: React.DragEvent<HTMLElement>, columnId: string) => {
+    e.stopPropagation();
     setDraggedColumn(columnId);
+    setDropTarget(null);
     e.dataTransfer.effectAllowed = 'move';
-  }, []);
+    e.dataTransfer.setData('application/x-dynomite-column', columnId);
+    e.dataTransfer.setData('text/plain', columnId);
 
-  const handleDragOver = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
-  }, []);
-
-  const handleDrop = useCallback((e: React.DragEvent, targetColumnId: string) => {
-    e.preventDefault();
-    if (!draggedColumn || draggedColumn === targetColumnId) return;
-
-    const newOrder = [...columnOrder];
-    const draggedIdx = newOrder.indexOf(draggedColumn);
-    const targetIdx = newOrder.indexOf(targetColumnId);
-
-    if (draggedIdx !== -1 && targetIdx !== -1) {
-      newOrder.splice(draggedIdx, 1);
-      newOrder.splice(targetIdx, 0, draggedColumn);
-      setColumnOrder(newOrder);
+    const headerCell = e.currentTarget.closest('th');
+    if (headerCell) {
+      e.dataTransfer.setDragImage(headerCell, 12, 12);
     }
-    setDraggedColumn(null);
-  }, [draggedColumn, columnOrder]);
+  }, []);
 
-  const handleDragEnd = useCallback(() => {
+  const handleColumnDragOver = useCallback((e: React.DragEvent<HTMLElement>, targetColumnId: string) => {
+    if (!draggedColumn || draggedColumn === targetColumnId) {
+      setDropTarget(null);
+      return;
+    }
+
+    e.preventDefault();
+    e.stopPropagation();
+    e.dataTransfer.dropEffect = 'move';
+    setDropTarget({
+      columnId: targetColumnId,
+      position: getColumnDropPosition(e),
+    });
+  }, [draggedColumn]);
+
+  const handleColumnDrop = useCallback((e: React.DragEvent<HTMLElement>, targetColumnId: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    const transferredColumnId = e.dataTransfer.getData('application/x-dynomite-column') || e.dataTransfer.getData('text/plain');
+    const sourceColumnId = draggedColumn || transferredColumnId;
+
+    if (sourceColumnId && sourceColumnId !== targetColumnId) {
+      const dropPosition = getColumnDropPosition(e);
+      setColumnOrder((currentOrder) => {
+        const nextOrder = moveColumnInOrder(currentOrder, columnIds, sourceColumnId, targetColumnId, dropPosition);
+        return columnOrdersEqual(currentOrder, nextOrder) ? currentOrder : nextOrder;
+      });
+    }
+
     setDraggedColumn(null);
+    setDropTarget(null);
+  }, [draggedColumn, columnIds]);
+
+  const handleColumnDragEnd = useCallback(() => {
+    setDraggedColumn(null);
+    setDropTarget(null);
   }, []);
 
   const handleRowMouseDown = useCallback((e: React.MouseEvent) => {
@@ -2036,19 +2132,34 @@ const TabResultsTable = memo(function TabResultsTable({ tab, tableInfo, onFetchM
                   {headerGroup.headers.map((header) => (
                     <th
                       key={header.id}
-                      draggable
-                      onDragStart={(e) => handleDragStart(e, header.id)}
-                      onDragOver={handleDragOver}
-                      onDrop={(e) => handleDrop(e, header.id)}
-                      onDragEnd={handleDragEnd}
+                      onDragOver={(e) => handleColumnDragOver(e, header.id)}
+                      onDrop={(e) => handleColumnDrop(e, header.id)}
                       className={cn(
-                        'px-2 py-1.5 text-left font-medium text-muted-foreground cursor-grab active:cursor-grabbing whitespace-nowrap group relative',
-                        draggedColumn === header.id && 'opacity-50'
+                        'px-2 py-1.5 text-left font-medium text-muted-foreground whitespace-nowrap group relative transition-colors',
+                        draggedColumn === header.id && 'opacity-50',
+                        dropTarget?.columnId === header.id && 'bg-primary/5 text-foreground'
                       )}
                       style={{ width: header.getSize() }}
                     >
+                      {dropTarget?.columnId === header.id && dropTarget.position === 'before' && (
+                        <div className="pointer-events-none absolute left-0 top-1 bottom-1 w-0.5 rounded-full bg-primary" />
+                      )}
+                      {dropTarget?.columnId === header.id && dropTarget.position === 'after' && (
+                        <div className="pointer-events-none absolute right-0 top-1 bottom-1 w-0.5 rounded-full bg-primary" />
+                      )}
                       <div className="flex items-center gap-1">
-                        <GripVertical className="h-3 w-3 opacity-30" />
+                        <button
+                          type="button"
+                          draggable
+                          onDragStart={(e) => handleColumnDragStart(e, header.id)}
+                          onDragEnd={handleColumnDragEnd}
+                          onClick={(e) => e.stopPropagation()}
+                          className="p-0.5 rounded cursor-grab active:cursor-grabbing text-muted-foreground/60 hover:text-foreground hover:bg-muted focus:outline-none focus:ring-1 focus:ring-ring"
+                          title={`Drag ${header.id} column`}
+                          aria-label={`Drag ${header.id} column`}
+                        >
+                          <GripVertical className="h-3 w-3 pointer-events-none" />
+                        </button>
                         {header.isPlaceholder
                           ? null
                           : flexRender(
