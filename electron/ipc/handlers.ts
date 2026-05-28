@@ -8,6 +8,8 @@ import { buildQueryCommand, buildScanCommand, type ScanParams } from '../service
 import { getUpdateStatus, checkForUpdates, quitAndInstall } from '../updater.js';
 import type { TableInfo, QueryParams, QueryResult, BatchQueryResult, QueryProgress } from '../types.js';
 
+const MAX_QUERY_RESULTS = 1_000_000;
+
 // ============ Input Validation Helpers ============
 
 /**
@@ -66,7 +68,7 @@ function validateMaxResults(maxResults: unknown): maxResults is number {
   return typeof maxResults === 'number' &&
     Number.isInteger(maxResults) &&
     maxResults > 0 &&
-    maxResults <= 100000;
+    maxResults <= MAX_QUERY_RESULTS;
 }
 
 export function registerIpcHandlers(): void {
@@ -281,7 +283,7 @@ export function registerIpcHandlers(): void {
       throw new Error('Invalid query parameters');
     }
     if (!validateMaxResults(maxResults)) {
-      throw new Error('Invalid max results (must be 1-100000)');
+      throw new Error(`Invalid max results (must be 1-${MAX_QUERY_RESULTS})`);
     }
     const queryId = requestId || `query-${++queryIdCounter}`;
 
@@ -385,7 +387,7 @@ export function registerIpcHandlers(): void {
       throw new Error('Invalid scan parameters');
     }
     if (!validateMaxResults(maxResults)) {
-      throw new Error('Invalid max results (must be 1-100000)');
+      throw new Error(`Invalid max results (must be 1-${MAX_QUERY_RESULTS})`);
     }
     const queryId = requestId || `scan-${++queryIdCounter}`;
 

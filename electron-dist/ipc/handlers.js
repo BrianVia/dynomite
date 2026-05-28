@@ -6,6 +6,7 @@ import { checkAuthStatus, loginWithSSO } from '../services/credential-manager.js
 import { getDynamoDBClient, getDynamoDBDocClient, clearClientsForProfile } from '../services/dynamo-client-factory.js';
 import { buildQueryCommand, buildScanCommand } from '../services/query-executor.js';
 import { getUpdateStatus, checkForUpdates, quitAndInstall } from '../updater.js';
+const MAX_QUERY_RESULTS = 1_000_000;
 // ============ Input Validation Helpers ============
 /**
  * Validate a profile name - must be a non-empty string with valid characters
@@ -63,7 +64,7 @@ function validateMaxResults(maxResults) {
     return typeof maxResults === 'number' &&
         Number.isInteger(maxResults) &&
         maxResults > 0 &&
-        maxResults <= 100000;
+        maxResults <= MAX_QUERY_RESULTS;
 }
 export function registerIpcHandlers() {
     // ============ Profile Operations ============
@@ -260,7 +261,7 @@ export function registerIpcHandlers() {
             throw new Error('Invalid query parameters');
         }
         if (!validateMaxResults(maxResults)) {
-            throw new Error('Invalid max results (must be 1-100000)');
+            throw new Error(`Invalid max results (must be 1-${MAX_QUERY_RESULTS})`);
         }
         const queryId = requestId || `query-${++queryIdCounter}`;
         try {
@@ -356,7 +357,7 @@ export function registerIpcHandlers() {
             throw new Error('Invalid scan parameters');
         }
         if (!validateMaxResults(maxResults)) {
-            throw new Error('Invalid max results (must be 1-100000)');
+            throw new Error(`Invalid max results (must be 1-${MAX_QUERY_RESULTS})`);
         }
         const queryId = requestId || `scan-${++queryIdCounter}`;
         try {
