@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.10.0](https://github.com/BrianVia/dynomite/compare/v1.9.3...v1.10.0) (2026-05-28)
+
+
+### Features
+
+* raise max query results to 1m ([#24](https://github.com/BrianVia/dynomite/issues/24)) ([2ad3fae](https://github.com/BrianVia/dynomite/commit/2ad3fae180bd57c49b231dce045751aa20dd24f4))
+
+
+### Bug Fixes
+
+* enable main table column drag and drop ([#26](https://github.com/BrianVia/dynomite/issues/26)) ([45ce31c](https://github.com/BrianVia/dynomite/commit/45ce31c86352e55994d9aa2545b5b439d63a3c69))
+
 ## [1.9.3](https://github.com/BrianVia/dynomite/compare/v1.9.2...v1.9.3) (2026-05-18)
 
 
