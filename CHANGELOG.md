@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.10.1](https://github.com/BrianVia/dynomite/compare/v1.10.0...v1.10.1) (2026-06-08)
+
+
+### Bug Fixes
+
+* stabilize multiselect context menu copy ([#27](https://github.com/BrianVia/dynomite/issues/27)) ([f45d4eb](https://github.com/BrianVia/dynomite/commit/f45d4ebb95764c18111fb129da6f06a412803305))
+
 ## [1.10.0](https://github.com/BrianVia/dynomite/compare/v1.9.3...v1.10.0) (2026-05-28)
 
 
