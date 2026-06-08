@@ -18,6 +18,24 @@ export function FieldPickerDialog({
   onCopy,
   rowCount,
 }: FieldPickerDialogProps) {
+  if (!isOpen) return null;
+
+  return (
+    <FieldPickerDialogContent
+      onClose={onClose}
+      fields={fields}
+      onCopy={onCopy}
+      rowCount={rowCount}
+    />
+  );
+}
+
+function FieldPickerDialogContent({
+  onClose,
+  fields,
+  onCopy,
+  rowCount,
+}: Omit<FieldPickerDialogProps, 'isOpen'>) {
   const [selectedFields, setSelectedFields] = useState<Set<string>>(() => new Set(fields));
 
   const toggleField = (field: string) => {
@@ -39,8 +57,6 @@ export function FieldPickerDialog({
     onCopy(Array.from(selectedFields));
     onClose();
   };
-
-  if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm dialog-backdrop">

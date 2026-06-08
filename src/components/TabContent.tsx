@@ -1345,9 +1345,18 @@ interface ContextMenuState {
   x: number;
   y: number;
   rowIndex: number | null;
+  rowIndices: number[];
   cellValue?: string;
   columnId?: string;
 }
+
+const CLOSED_CONTEXT_MENU: ContextMenuState = {
+  visible: false,
+  x: 0,
+  y: 0,
+  rowIndex: null,
+  rowIndices: [],
+};
 
 const TabResultsTable = memo(function TabResultsTable({ tab, tableInfo, onFetchMore, onCancel }: TabResultsTableProps) {
   const { updateTabQueryState } = useTabsStore();
@@ -1372,12 +1381,7 @@ const TabResultsTable = memo(function TabResultsTable({ tab, tableInfo, onFetchM
   const [dropTarget, setDropTarget] = useState<ColumnDropTarget | null>(null);
   const [selectedRows, setSelectedRows] = useState<Set<number>>(new Set());
   const [lastSelectedRow, setLastSelectedRow] = useState<number | null>(null);
-  const [contextMenu, setContextMenu] = useState<ContextMenuState>({
-    visible: false,
-    x: 0,
-    y: 0,
-    rowIndex: null,
-  });
+  const [contextMenu, setContextMenu] = useState<ContextMenuState>(CLOSED_CONTEXT_MENU);
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [editingRow, setEditingRow] = useState<number | null>(null);
@@ -1386,6 +1390,7 @@ const TabResultsTable = memo(function TabResultsTable({ tab, tableInfo, onFetchM
   const [scriptEditField, setScriptEditField] = useState<string | null>(null);
   const [hiddenColumns, setHiddenColumns] = useState<Set<string>>(new Set());
   const [showFieldPicker, setShowFieldPicker] = useState(false);
+  const [copyDialogRowIndices, setCopyDialogRowIndices] = useState<number[] | null>(null);
   const [showExportDialog, setShowExportDialog] = useState(false);
   const [showInsertDialog, setShowInsertDialog] = useState(false);
   const [showBulkImportDialog, setShowBulkImportDialog] = useState(false);
@@ -1424,7 +1429,7 @@ const TabResultsTable = memo(function TabResultsTable({ tab, tableInfo, onFetchM
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       if (contextMenuRef.current && !contextMenuRef.current.contains(e.target as Node)) {
-        setContextMenu({ visible: false, x: 0, y: 0, rowIndex: null });
+        setContextMenu(CLOSED_CONTEXT_MENU);
       }
     };
 
@@ -1494,7 +1499,7 @@ const TabResultsTable = memo(function TabResultsTable({ tab, tableInfo, onFetchM
   }, [contextMenu.rowIndex, queryState.results, tableInfo]);
 
   const handleOpenRowAsQuery = useCallback(async (shortcut: RowQueryShortcut) => {
-    setContextMenu({ visible: false, x: 0, y: 0, rowIndex: null });
+    setContextMenu(CLOSED_CONTEXT_MENU);
 
     const startTime = Date.now();
     const currentQueryId = generateQueryRequestId('row-query');
@@ -1724,6 +1729,22 @@ const TabResultsTable = memo(function TabResultsTable({ tab, tableInfo, onFetchM
     () => allRowIndices.filter((rowIndex) => selectedRows.has(rowIndex)),
     [allRowIndices, selectedRows]
   );
+  const contextMenuRowIndices = useMemo(() => (
+    contextMenu.visible
+      ? contextMenu.rowIndices
+      : selectedRowIndices.length > 0
+      ? selectedRowIndices
+      : contextMenu.rowIndex !== null
+      ? [contextMenu.rowIndex]
+      : []
+  ), [contextMenu.rowIndex, contextMenu.rowIndices, contextMenu.visible, selectedRowIndices]);
+  const contextMenuRowCount = contextMenuRowIndices.length;
+  const fieldPickerRowCount = copyDialogRowIndices?.length
+    ?? (selectedRowIndices.length > 0
+      ? selectedRowIndices.length
+      : contextMenu.rowIndex !== null
+      ? 1
+      : queryState.results.length);
   const visibleRowIndexByOriginalIndex = useMemo(() => {
     const indexByOriginalIndex = new Map<number, number>();
     rows.forEach((row, visibleIndex) => {
@@ -1891,21 +1912,24 @@ const TabResultsTable = memo(function TabResultsTable({ tab, tableInfo, onFetchM
 
   const handleContextMenu = useCallback((e: React.MouseEvent, rowIndex: number, cellValue?: string, columnId?: string) => {
     e.preventDefault();
-    // If right-clicking on an unselected row, select it. Use a functional
-    // update so a right-click immediately after Cmd+A sees the latest selection.
+    const rowIndices = selectedRows.has(rowIndex) ? selectedRowIndices : [rowIndex];
+
+    // If right-clicking on an unselected row, select it
     setSelectedRows((previous) => previous.has(rowIndex) ? previous : new Set([rowIndex]));
+
     setContextMenu({
       visible: true,
       x: e.clientX,
       y: e.clientY,
       rowIndex,
+      rowIndices,
       cellValue,
       columnId,
     });
-  }, []);
+  }, [selectedRows, selectedRowIndices]);
 
   const handleDeleteRow = useCallback(() => {
-    const rowsToDelete = selectedRows.size > 0 ? selectedRowIndices : contextMenu.rowIndex !== null ? [contextMenu.rowIndex] : [];
+    const rowsToDelete = contextMenuRowIndices.length > 0 ? contextMenuRowIndices : [];
 
     rowsToDelete.forEach(rowIndex => {
       const rowData = queryState.results[rowIndex];
@@ -1919,9 +1943,9 @@ const TabResultsTable = memo(function TabResultsTable({ tab, tableInfo, onFetchM
       }
     });
 
-    setContextMenu({ visible: false, x: 0, y: 0, rowIndex: null });
+    setContextMenu(CLOSED_CONTEXT_MENU);
     setSelectedRows(new Set());
-  }, [selectedRows.size, selectedRowIndices, contextMenu.rowIndex, queryState.results, tab.id, tableInfo, addChange]);
+  }, [contextMenuRowIndices, queryState.results, tab.id, tableInfo, addChange]);
 
   const handleDiscardChanges = useCallback(() => {
     clearChangesForTab(tab.id);
@@ -2355,12 +2379,12 @@ const TabResultsTable = memo(function TabResultsTable({ tab, tableInfo, onFetchM
           style={{ left: contextMenu.x, top: contextMenu.y }}
         >
           {/* Edit options - first like Dynobase */}
-          {selectedRows.size <= 1 && contextMenu.rowIndex !== null && (
+          {contextMenuRowCount <= 1 && contextMenu.rowIndex !== null && (
             <>
               <button
                 onClick={() => {
                   setEditingRow(contextMenu.rowIndex);
-                  setContextMenu({ visible: false, x: 0, y: 0, rowIndex: null });
+                  setContextMenu(CLOSED_CONTEXT_MENU);
                 }}
                 className="w-full flex items-center justify-between px-3 py-1.5 text-sm text-left hover:bg-accent transition-colors"
               >
@@ -2372,7 +2396,7 @@ const TabResultsTable = memo(function TabResultsTable({ tab, tableInfo, onFetchM
               <button
                 onClick={() => {
                   setJsonEditingRow(contextMenu.rowIndex);
-                  setContextMenu({ visible: false, x: 0, y: 0, rowIndex: null });
+                  setContextMenu(CLOSED_CONTEXT_MENU);
                 }}
                 className="w-full flex items-center justify-between px-3 py-1.5 text-sm text-left hover:bg-accent transition-colors"
               >
@@ -2386,7 +2410,7 @@ const TabResultsTable = memo(function TabResultsTable({ tab, tableInfo, onFetchM
           )}
 
           {/* Open row keys as query */}
-          {selectedRows.size <= 1 && rowQueryShortcuts.length > 0 && (
+          {contextMenuRowCount <= 1 && rowQueryShortcuts.length > 0 && (
             <>
               <div className="px-3 py-1 text-[10px] uppercase tracking-wide text-muted-foreground">
                 Open as query
@@ -2409,11 +2433,11 @@ const TabResultsTable = memo(function TabResultsTable({ tab, tableInfo, onFetchM
           )}
 
           {/* Bulk edit for multiple rows */}
-          {selectedRows.size > 1 && (
+          {contextMenuRowCount > 1 && (
             <>
               <div className="px-3 py-1.5">
                 <div className="text-xs text-muted-foreground mb-1">
-                  Set field for {selectedRows.size} rows:
+                  Set field for {contextMenuRowCount} rows:
                 </div>
                 <div className="flex flex-wrap gap-1 max-h-32 overflow-y-auto">
                   {columns.slice(0, 20).map((col) => (
@@ -2421,7 +2445,7 @@ const TabResultsTable = memo(function TabResultsTable({ tab, tableInfo, onFetchM
                       key={col.id}
                       onClick={() => {
                         setBulkEditField(col.id as string);
-                        setContextMenu({ visible: false, x: 0, y: 0, rowIndex: null });
+                        setContextMenu(CLOSED_CONTEXT_MENU);
                       }}
                       className="px-2 py-0.5 text-xs rounded bg-muted hover:bg-accent transition-colors"
                     >
@@ -2436,22 +2460,22 @@ const TabResultsTable = memo(function TabResultsTable({ tab, tableInfo, onFetchM
                   <button
                     onClick={() => {
                       setBulkEditField(contextMenu.columnId!);
-                      setContextMenu({ visible: false, x: 0, y: 0, rowIndex: null });
+                      setContextMenu(CLOSED_CONTEXT_MENU);
                     }}
                     className="w-full flex items-center gap-2 px-3 py-1.5 text-sm text-left hover:bg-accent transition-colors"
                   >
                     <Pencil className="h-3.5 w-3.5" />
-                    Set "{contextMenu.columnId}" to value... ({selectedRows.size} rows)
+                    Set "{contextMenu.columnId}" to value... ({contextMenuRowCount} rows)
                   </button>
                   <button
                     onClick={() => {
                       setScriptEditField(contextMenu.columnId!);
-                      setContextMenu({ visible: false, x: 0, y: 0, rowIndex: null });
+                      setContextMenu(CLOSED_CONTEXT_MENU);
                     }}
                     className="w-full flex items-center gap-2 px-3 py-1.5 text-sm text-left hover:bg-accent transition-colors"
                   >
                     <Code className="h-3.5 w-3.5" />
-                    Edit "{contextMenu.columnId}" with JavaScript ({selectedRows.size} rows)
+                    Edit "{contextMenu.columnId}" with JavaScript ({contextMenuRowCount} rows)
                   </button>
                 </>
               )}
@@ -2460,11 +2484,11 @@ const TabResultsTable = memo(function TabResultsTable({ tab, tableInfo, onFetchM
           )}
 
           {/* Copy options */}
-          {contextMenu.cellValue !== undefined && selectedRows.size <= 1 && (
+          {contextMenu.cellValue !== undefined && contextMenuRowCount <= 1 && (
             <button
               onClick={() => {
                 navigator.clipboard.writeText(contextMenu.cellValue || '');
-                setContextMenu({ visible: false, x: 0, y: 0, rowIndex: null });
+                setContextMenu(CLOSED_CONTEXT_MENU);
               }}
               className="w-full flex items-center gap-2 px-3 py-1.5 text-sm text-left hover:bg-accent transition-colors"
             >
@@ -2479,19 +2503,19 @@ const TabResultsTable = memo(function TabResultsTable({ tab, tableInfo, onFetchM
           )}
           <button
             onClick={() => {
-              const rowsToCopy = selectedRows.size > 0 ? selectedRowIndices : (contextMenu.rowIndex !== null ? [contextMenu.rowIndex] : []);
-              copyRowsToClipboard(rowsToCopy);
-              setContextMenu({ visible: false, x: 0, y: 0, rowIndex: null });
+              copyRowsToClipboard(contextMenuRowIndices);
+              setContextMenu(CLOSED_CONTEXT_MENU);
             }}
             className="w-full flex items-center gap-2 px-3 py-1.5 text-sm text-left hover:bg-accent transition-colors"
           >
             <Copy className="h-3.5 w-3.5" />
-            Copy {selectedRows.size > 1 ? `${selectedRows.size} rows` : 'Row'}
+            Copy {contextMenuRowCount > 1 ? `${contextMenuRowCount} rows` : 'Row'}
           </button>
           <button
             onClick={() => {
+              setCopyDialogRowIndices(contextMenuRowIndices);
               setShowFieldPicker(true);
-              setContextMenu({ visible: false, x: 0, y: 0, rowIndex: null });
+              setContextMenu(CLOSED_CONTEXT_MENU);
             }}
             className="w-full flex items-center gap-2 px-3 py-1.5 text-sm text-left hover:bg-accent transition-colors"
           >
@@ -2505,7 +2529,7 @@ const TabResultsTable = memo(function TabResultsTable({ tab, tableInfo, onFetchM
           <button
             onClick={() => {
               setShowExportDialog(true);
-              setContextMenu({ visible: false, x: 0, y: 0, rowIndex: null });
+              setContextMenu(CLOSED_CONTEXT_MENU);
             }}
             className="w-full flex items-center gap-2 px-3 py-1.5 text-sm text-left hover:bg-accent transition-colors"
           >
@@ -2522,7 +2546,7 @@ const TabResultsTable = memo(function TabResultsTable({ tab, tableInfo, onFetchM
           >
             <span className="flex items-center gap-2">
               <Trash2 className="h-3.5 w-3.5" />
-              Delete {selectedRows.size > 1 ? `${selectedRows.size} rows` : 'row'}
+              Delete {contextMenuRowCount > 1 ? `${contextMenuRowCount} rows` : 'row'}
             </span>
             <span className="text-xs text-muted-foreground">⌘⌫</span>
           </button>
@@ -2653,14 +2677,20 @@ const TabResultsTable = memo(function TabResultsTable({ tab, tableInfo, onFetchM
       {showFieldPicker && (
         <FieldPickerDialog
           isOpen={showFieldPicker}
-          onClose={() => setShowFieldPicker(false)}
+          onClose={() => {
+            setShowFieldPicker(false);
+            setCopyDialogRowIndices(null);
+          }}
           fields={allFieldNames}
-          rowCount={selectedRows.size > 0 ? selectedRows.size : (contextMenu.rowIndex !== null ? 1 : queryState.results.length)}
+          rowCount={fieldPickerRowCount}
           onCopy={(selectedFields) => {
-            const rowIndices = selectedRows.size > 0
-              ? selectedRowIndices
-              : (contextMenu.rowIndex !== null ? [contextMenu.rowIndex] : queryState.results.map((_, i) => i));
-            copyRowsToClipboard(rowIndices, selectedFields);
+            const fieldPickerRowIndices = copyDialogRowIndices
+              ?? (selectedRowIndices.length > 0
+                ? selectedRowIndices
+                : contextMenu.rowIndex !== null
+                ? [contextMenu.rowIndex]
+                : queryState.results.map((_, i) => i));
+            copyRowsToClipboard(fieldPickerRowIndices, selectedFields);
           }}
         />
       )}
