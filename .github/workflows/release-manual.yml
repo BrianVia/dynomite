@@ -25,6 +25,8 @@ jobs:
           CSC_IDENTITY_AUTO_DISCOVERY: false
 
   build-linux:
+    # Temporarily disabled.
+    if: ${{ false }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
