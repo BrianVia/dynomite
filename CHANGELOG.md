@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.11.0](https://github.com/BrianVia/dynomite/compare/v1.10.1...v1.11.0) (2026-06-09)
+
+
+### Features
+
+* add query history with replay ([8587711](https://github.com/BrianVia/dynomite/commit/85877117281737da76551b47e679ccf2fbb79a7d))
+* open table in another profile with query state pre-filled ([b06153f](https://github.com/BrianVia/dynomite/commit/b06153f1b93798a237dca753dcb9d549ac6f1afa))
+* show SSO token expiry in profile selector ([54d2e3e](https://github.com/BrianVia/dynomite/commit/54d2e3ea3f79ebae7cb881d49586f47697aae7cd))
+
+
+### Bug Fixes
+
+* prevent table list states from overflowing at narrow sidebar widths ([11fc378](https://github.com/BrianVia/dynomite/commit/11fc378410ed7bfa06696646fbf9b785853c34b6))
+
 ## [1.10.1](https://github.com/BrianVia/dynomite/compare/v1.10.0...v1.10.1) (2026-06-08)
 
 
