@@ -3006,21 +3006,6 @@ export function TabContent() {
       const executeInitialScan = async () => {
         const startTime = Date.now();
         const currentScanQueryId = generateQueryRequestId('initial-scan');
-        // Record execution in history (result count attached on completion)
-        const historyEntryId = useQueryHistoryStore.getState().recordExecution({
-          profileName: activeTab.profileName,
-          tableName: activeTab.tableInfo!.tableName,
-          operation: 'scan',
-          selectedIndex: null,
-          pkValue: '',
-          scanPkPrefix: false,
-          skOperator: 'eq',
-          skValue: '',
-          skValue2: '',
-          filters: [],
-          maxResults: INITIAL_SCAN_LIMIT,
-          scanForward: true,
-        });
         updateTabQueryState(activeTab.id, {
           isLoading: true,
           error: null,
@@ -3073,7 +3058,6 @@ export function TabContent() {
             isFetchingMore: false,
             queryElapsedMs: result.elapsedMs,
           });
-          useQueryHistoryStore.getState().setResultCount(historyEntryId, result.count);
         } catch (error) {
           updateTabQueryState(activeTab.id, {
             error: (error as Error).message,
