@@ -187,18 +187,20 @@ export function TableList() {
 
   if (!selectedProfile) {
     return (
-      <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
-        <Database className="h-12 w-12 mb-4 opacity-50" />
-        <p>Select a profile to view tables</p>
+      <div className="flex flex-col items-center justify-center h-full px-6 py-8 text-center text-muted-foreground">
+        <Database className="h-12 w-12 mb-4 shrink-0 opacity-50" />
+        <p className="max-w-full break-words">Select a profile to view tables</p>
       </div>
     );
   }
 
   if (!isAuthenticated) {
     return (
-      <div className="flex flex-col items-center justify-center h-full text-muted-foreground gap-4">
-        <AlertCircle className="h-12 w-12 text-yellow-500" />
-        <p>Authentication required for {selectedProfile.name}</p>
+      <div className="flex flex-col items-center justify-center h-full px-6 py-8 text-center text-muted-foreground gap-4">
+        <AlertCircle className="h-12 w-12 shrink-0 text-yellow-500" />
+        <p className="max-w-full break-words">
+          Authentication required for {selectedProfile.name}
+        </p>
         <Button onClick={handleLogin} disabled={loggingIn}>
           {loggingIn ? (
             <>
@@ -247,7 +249,7 @@ export function TableList() {
 
       {/* Error state */}
       {(error || describeTableError) && (
-        <div className="px-3 py-2 text-sm text-red-500 bg-red-500/10 border-b">
+        <div className="px-3 py-2 text-sm text-red-500 bg-red-500/10 border-b break-words">
           {describeTableError || error}
         </div>
       )}
@@ -259,9 +261,9 @@ export function TableList() {
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
           </div>
         ) : filteredTables.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-32 text-muted-foreground">
+          <div className="flex flex-col items-center justify-center h-32 px-6 text-center text-muted-foreground">
             {searchQuery ? (
-              <p className="text-sm">No tables match "{searchQuery}"</p>
+              <p className="text-sm max-w-full break-words">No tables match "{searchQuery}"</p>
             ) : (
               <p className="text-sm">No tables found</p>
             )}
