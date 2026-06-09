@@ -165,6 +165,27 @@ export interface SavedBookmark {
   scanForward: boolean;
 }
 
+// A recorded query/scan execution shown in the history panel
+export interface QueryHistoryEntry {
+  id: string;
+  tablePrefix: string; // Stable prefix for cross-environment matching
+  executedAt: number; // Timestamp of the most recent execution
+  profileName: string;
+  tableName: string;
+  operation: 'query' | 'scan';
+  resultCount?: number; // Attached once the execution completes
+  // Query state to replay
+  selectedIndex: string | null;
+  pkValue: string;
+  scanPkPrefix: boolean;
+  skOperator: SkOperator;
+  skValue: string;
+  skValue2: string;
+  filters: FilterCondition[];
+  maxResults: number;
+  scanForward: boolean;
+}
+
 // Declare the dynomite API on window
 declare global {
   interface Window {

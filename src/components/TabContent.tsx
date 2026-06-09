@@ -58,6 +58,7 @@ import { useProfileStore } from '@/stores/profile-store';
 import { useOpenInProfile } from '@/hooks/use-open-in-profile';
 import { OpenInProfileMenuItems, OpenInProfileNotice } from './OpenInProfileMenu';
 import { usePendingChangesStore, type PendingChange } from '@/stores/pending-changes-store';
+import { useQueryHistoryStore } from '@/stores/query-history-store';
 import { clampContextMenuPosition } from '@/lib/context-menu-position';
 import { cn } from '@/lib/utils';
 import type { TableInfo, SkOperator, QueryParams, FilterOperator, FilterCondition, BatchWriteOperation } from '@/types';
@@ -736,6 +737,21 @@ const TabQueryBuilder = memo(function TabQueryBuilder({ tab, tableInfo }: TabQue
 
     const startTime = Date.now();
     const currentQueryId = generateQueryRequestId('query');
+    // Record execution in history (result count attached on completion)
+    const historyEntryId = useQueryHistoryStore.getState().recordExecution({
+      profileName,
+      tableName: tableInfo.tableName,
+      operation: 'query',
+      selectedIndex: queryState.selectedIndex,
+      pkValue: localPkValue,
+      scanPkPrefix: false,
+      skOperator: queryState.skOperator,
+      skValue: localSkValue,
+      skValue2: localSkEndValue,
+      filters: validFilters,
+      maxResults: queryState.maxResults,
+      scanForward: queryState.scanForward,
+    });
     updateTabQueryState(tab.id, {
       // Persist local values to store
       pkValue: localPkValue,
@@ -812,6 +828,7 @@ const TabQueryBuilder = memo(function TabQueryBuilder({ tab, tableInfo }: TabQue
         isFetchingMore: false,
         queryElapsedMs: result.elapsedMs,
       });
+      useQueryHistoryStore.getState().setResultCount(historyEntryId, result.count);
     } catch (error) {
       updateTabQueryState(tab.id, {
         error: (error as Error).message,
@@ -839,6 +856,21 @@ const TabQueryBuilder = memo(function TabQueryBuilder({ tab, tableInfo }: TabQue
 
     const startTime = Date.now();
     const currentQueryId = generateQueryRequestId('scan');
+    // Record execution in history (result count attached on completion)
+    const historyEntryId = useQueryHistoryStore.getState().recordExecution({
+      profileName,
+      tableName: tableInfo.tableName,
+      operation: 'scan',
+      selectedIndex: queryState.selectedIndex,
+      pkValue: localPkValue,
+      scanPkPrefix: queryState.scanPkPrefix,
+      skOperator: queryState.skOperator,
+      skValue: localSkValue,
+      skValue2: localSkEndValue,
+      filters: validFilters,
+      maxResults: queryState.maxResults,
+      scanForward: queryState.scanForward,
+    });
     updateTabQueryState(tab.id, {
       // Persist local values to store (useful for PK prefix scan + fetch more)
       pkValue: localPkValue,
@@ -912,6 +944,7 @@ const TabQueryBuilder = memo(function TabQueryBuilder({ tab, tableInfo }: TabQue
         isFetchingMore: false,
         queryElapsedMs: result.elapsedMs,
       });
+      useQueryHistoryStore.getState().setResultCount(historyEntryId, result.count);
     } catch (error) {
       updateTabQueryState(tab.id, {
         error: (error as Error).message,
@@ -1506,6 +1539,21 @@ const TabResultsTable = memo(function TabResultsTable({ tab, tableInfo, onFetchM
 
     const startTime = Date.now();
     const currentQueryId = generateQueryRequestId('row-query');
+    // Record execution in history (result count attached on completion)
+    const historyEntryId = useQueryHistoryStore.getState().recordExecution({
+      profileName: tab.profileName,
+      tableName: tableInfo.tableName,
+      operation: 'query',
+      selectedIndex: shortcut.indexName,
+      pkValue: shortcut.pk.value,
+      scanPkPrefix: false,
+      skOperator: 'eq',
+      skValue: shortcut.sk?.value ?? '',
+      skValue2: '',
+      filters: [],
+      maxResults: queryState.maxResults,
+      scanForward: queryState.scanForward,
+    });
     updateTabQueryState(tab.id, {
       selectedIndex: shortcut.indexName,
       pkValue: shortcut.pk.value,
@@ -1576,6 +1624,7 @@ const TabResultsTable = memo(function TabResultsTable({ tab, tableInfo, onFetchM
         isFetchingMore: false,
         queryElapsedMs: result.elapsedMs,
       });
+      useQueryHistoryStore.getState().setResultCount(historyEntryId, result.count);
     } catch (error) {
       updateTabQueryState(tab.id, {
         error: (error as Error).message,
@@ -2957,6 +3006,21 @@ export function TabContent() {
       const executeInitialScan = async () => {
         const startTime = Date.now();
         const currentScanQueryId = generateQueryRequestId('initial-scan');
+        // Record execution in history (result count attached on completion)
+        const historyEntryId = useQueryHistoryStore.getState().recordExecution({
+          profileName: activeTab.profileName,
+          tableName: activeTab.tableInfo!.tableName,
+          operation: 'scan',
+          selectedIndex: null,
+          pkValue: '',
+          scanPkPrefix: false,
+          skOperator: 'eq',
+          skValue: '',
+          skValue2: '',
+          filters: [],
+          maxResults: INITIAL_SCAN_LIMIT,
+          scanForward: true,
+        });
         updateTabQueryState(activeTab.id, {
           isLoading: true,
           error: null,
@@ -3009,6 +3073,7 @@ export function TabContent() {
             isFetchingMore: false,
             queryElapsedMs: result.elapsedMs,
           });
+          useQueryHistoryStore.getState().setResultCount(historyEntryId, result.count);
         } catch (error) {
           updateTabQueryState(activeTab.id, {
             error: (error as Error).message,

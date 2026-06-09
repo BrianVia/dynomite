@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { ProfileSelector } from './components/ProfileSelector';
 import { TableList } from './components/TableList';
 import { BookmarksList } from './components/BookmarksList';
+import { QueryHistoryList } from './components/QueryHistoryList';
 import { TabBar } from './components/TabBar';
 import { TabContent } from './components/TabContent';
 import { UpdateNotifier } from './components/UpdateNotifier';
@@ -87,7 +88,7 @@ function App() {
 
       {/* Main content */}
       <div className={`flex-1 flex min-h-0 ${isResizing ? 'select-none' : ''}`}>
-        {/* Sidebar - Table List + Bookmarks */}
+        {/* Sidebar - Table List + Bookmarks + Query History */}
         <aside
           className="border-r flex flex-col shrink-0 overflow-hidden"
           style={{ width: sidebarWidth }}
@@ -95,6 +96,7 @@ function App() {
           <div className="flex-1 min-h-0 overflow-y-auto">
             <TableList />
             <BookmarksList tableName={activeTab?.tableName ?? null} />
+            <QueryHistoryList />
           </div>
         </aside>
 
