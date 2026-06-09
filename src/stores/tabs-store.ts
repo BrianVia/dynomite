@@ -57,6 +57,7 @@ export interface Tab {
   profileName: string;
   isNew?: boolean; // For entrance animation
   isClosing?: boolean; // For exit animation
+  skipAutoScan?: boolean; // Skip the initial auto-scan (e.g., tab opened with pre-filled query state)
 }
 
 interface TabsState {
@@ -66,6 +67,7 @@ interface TabsState {
   // Actions
   openTab: (tableName: string, tableInfo: TableInfo | null, profileName: string) => void;
   openTabInBackground: (tableName: string, tableInfo: TableInfo | null, profileName: string) => void;
+  openTabWithQueryState: (tableName: string, tableInfo: TableInfo | null, profileName: string, queryState: Partial<TabQueryState>) => void;
   closeTab: (tabId: string) => void;
   setActiveTab: (tabId: string) => void;
   updateTabTableInfo: (tabId: string, tableInfo: TableInfo) => void;
@@ -151,6 +153,34 @@ export const useTabsStore = create<TabsState>((set, get) => ({
     set({
       tabs: [...state.tabs, newTab],
       // Keep activeTabId unchanged
+    });
+
+    // Clear the isNew flag after animation
+    setTimeout(() => {
+      set(state => ({
+        tabs: state.tabs.map(t => t.id === newTab.id ? { ...t, isNew: false } : t),
+      }));
+    }, 200);
+  },
+
+  openTabWithQueryState: (tableName, tableInfo, profileName, queryState) => {
+    const state = get();
+
+    // Always create a new tab with the provided query state pre-filled.
+    // Skip the initial auto-scan so the query is staged but not executed.
+    const newTab: Tab = {
+      id: generateTabId(),
+      tableName,
+      tableInfo,
+      queryState: { ...createDefaultQueryState(), ...queryState },
+      profileName,
+      isNew: true,
+      skipAutoScan: true,
+    };
+
+    set({
+      tabs: [...state.tabs, newTab],
+      activeTabId: newTab.id,
     });
 
     // Clear the isNew flag after animation

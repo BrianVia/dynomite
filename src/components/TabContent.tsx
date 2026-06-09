@@ -19,6 +19,7 @@ import {
   Database,
   ChevronDown,
   ChevronRight,
+  ArrowLeftRight,
   Play,
   ScanLine,
   ArrowUp,
@@ -54,6 +55,8 @@ import { InsertRowDialog } from './dialogs/InsertRowDialog';
 import { BulkImportDialog } from './dialogs/BulkImportDialog';
 import { useTabsStore, type Tab } from '@/stores/tabs-store';
 import { useProfileStore } from '@/stores/profile-store';
+import { useOpenInProfile } from '@/hooks/use-open-in-profile';
+import { OpenInProfileMenuItems, OpenInProfileNotice } from './OpenInProfileMenu';
 import { usePendingChangesStore, type PendingChange } from '@/stores/pending-changes-store';
 import { clampContextMenuPosition } from '@/lib/context-menu-position';
 import { cn } from '@/lib/utils';
@@ -2770,6 +2773,8 @@ export function TabContent() {
   const { tabs, activeTabId, updateTabQueryState } = useTabsStore();
   const { selectedProfile } = useProfileStore();
   const [schemaExpanded, setSchemaExpanded] = useState(false);
+  const [openInProfileOpen, setOpenInProfileOpen] = useState(false);
+  const { openInProfile, openingProfileName, notice, clearNotice } = useOpenInProfile();
   const lastScannedTabs = useRef<Set<string>>(new Set());
 
   const activeTab = tabs.find(t => t.id === activeTabId);
@@ -2945,6 +2950,9 @@ export function TabContent() {
     if (activeTab && activeTab.tableInfo && !lastScannedTabs.current.has(activeTab.id)) {
       lastScannedTabs.current.add(activeTab.id);
 
+      // Tabs opened with a pre-filled query state stage the query without executing it
+      if (activeTab.skipAutoScan) return;
+
       // Execute initial scan using batch API
       const executeInitialScan = async () => {
         const startTime = Date.now();
@@ -3047,6 +3055,14 @@ export function TabContent() {
   const hashKey = tableInfo.keySchema.find((k) => k.keyType === 'HASH');
   const rangeKey = tableInfo.keySchema.find((k) => k.keyType === 'RANGE');
 
+  const handleOpenInProfile = async (targetProfileName: string) => {
+    const success = await openInProfile(activeTab, targetProfileName);
+    // Keep the dropdown open on failure so another profile can be picked
+    if (success) {
+      setOpenInProfileOpen(false);
+    }
+  };
+
   const getAttributeType = (name: string): string => {
     const attr = tableInfo.attributeDefinitions.find((a) => a.attributeName === name);
     if (!attr) return '';
@@ -3079,17 +3095,57 @@ export function TabContent() {
               </span>
             </div>
           </div>
-          <button
-            onClick={() => setSchemaExpanded(!schemaExpanded)}
-            className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
-          >
-            {schemaExpanded ? (
-              <ChevronDown className="h-4 w-4" />
-            ) : (
-              <ChevronRight className="h-4 w-4" />
-            )}
-            Schema
-          </button>
+          <div className="flex items-center gap-4">
+            {/* Open in another profile */}
+            <div className="relative">
+              <button
+                onClick={() => setOpenInProfileOpen(!openInProfileOpen)}
+                className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                title="Open this table in another profile with the current query pre-filled"
+              >
+                {openingProfileName ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <ArrowLeftRight className="h-4 w-4" />
+                )}
+                Open in profile
+              </button>
+
+              {openInProfileOpen && (
+                <>
+                  {/* Backdrop */}
+                  <div
+                    className="fixed inset-0 z-10"
+                    onClick={() => setOpenInProfileOpen(false)}
+                  />
+
+                  {/* Dropdown */}
+                  <div className="absolute top-full right-0 z-20 mt-1 w-80 rounded-md border bg-popover shadow-lg py-1 dropdown-enter">
+                    <div className="px-3 py-1.5 text-xs text-muted-foreground border-b mb-1">
+                      Open in another profile
+                    </div>
+                    <OpenInProfileMenuItems
+                      currentProfileName={activeTab.profileName}
+                      openingProfileName={openingProfileName}
+                      onSelect={handleOpenInProfile}
+                    />
+                  </div>
+                </>
+              )}
+            </div>
+
+            <button
+              onClick={() => setSchemaExpanded(!schemaExpanded)}
+              className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+            >
+              {schemaExpanded ? (
+                <ChevronDown className="h-4 w-4" />
+              ) : (
+                <ChevronRight className="h-4 w-4" />
+              )}
+              Schema
+            </button>
+          </div>
         </div>
 
         {schemaExpanded && (
@@ -3172,6 +3228,8 @@ export function TabContent() {
           <TabResultsTable tab={activeTab} tableInfo={tableInfo} onFetchMore={handleFetchMore} onCancel={handleCancel} />
         </div>
       </div>
+
+      <OpenInProfileNotice notice={notice} onDismiss={clearNotice} />
     </div>
   );
 }
