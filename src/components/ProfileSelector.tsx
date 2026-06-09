@@ -1,7 +1,9 @@
 import { useEffect, useState, useRef } from 'react';
 import { ChevronDown, Check, LogIn, Loader2, Shield, ShieldCheck, Pencil, Star, EyeOff, Eye } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { getTokenExpiryInfo, type TokenExpiryInfo } from '@/lib/token-expiry';
 import { Button } from './ui/button';
+import { useNow } from '@/hooks/use-now';
 import { useProfileStore, PROFILE_COLORS, PROFILE_ENVIRONMENTS } from '@/stores/profile-store';
 import { useTableStore } from '@/stores/table-store';
 import type { AwsProfile, AuthStatus } from '@/types';
@@ -39,6 +41,7 @@ export function ProfileSelector() {
   const [showDisabled, setShowDisabled] = useState(false);
   const [hasRestoredProfile, setHasRestoredProfile] = useState(false);
   const editInputRef = useRef<HTMLInputElement>(null);
+  const now = useNow();
 
   // Load profiles on mount
   useEffect(() => {
@@ -145,6 +148,15 @@ export function ProfileSelector() {
     return authStatuses.get(profileName);
   };
 
+  const getExpiry = (auth: AuthStatus | undefined): TokenExpiryInfo | null => {
+    if (!auth?.authenticated || !auth.expiresAt) return null;
+    return getTokenExpiryInfo(auth.expiresAt, now);
+  };
+
+  const selectedExpiry = selectedProfile
+    ? getExpiry(getAuthStatus(selectedProfile.name))
+    : null;
+
   if (isLoading) {
     return (
       <div className="flex items-center gap-2 px-3 py-2 text-sm text-muted-foreground">
@@ -159,11 +171,19 @@ export function ProfileSelector() {
       <Button
         variant="outline"
         onClick={() => setIsOpen(!isOpen)}
-        className="w-64 justify-between no-drag"
+        title={selectedExpiry ? `SSO session ${selectedExpiry.label}` : undefined}
+        className={cn(
+          'w-64 justify-between no-drag',
+          selectedExpiry?.status === 'warning' && 'border-amber-500/60 text-amber-600 dark:text-amber-400',
+          selectedExpiry?.status === 'expired' && 'border-red-500/60 text-red-600 dark:text-red-400'
+        )}
       >
         <span className="truncate">
           {selectedProfile?.name || 'Select AWS Profile'}
         </span>
+        {selectedExpiry && selectedExpiry.status !== 'ok' && (
+          <span className="text-[10px] shrink-0">{selectedExpiry.label}</span>
+        )}
         <ChevronDown className={cn('h-4 w-4 transition-transform', isOpen && 'rotate-180')} />
       </Button>
 
@@ -209,6 +229,7 @@ export function ProfileSelector() {
                 {/* Enabled profiles */}
                 {getEnabledProfiles().map((profile) => {
                   const auth = getAuthStatus(profile.name);
+                  const expiry = getExpiry(auth);
                   const isSelected = selectedProfile?.name === profile.name;
                   const isLoggingIn = loggingIn === profile.name;
                   const isEditing = editingProfile === profile.name;
@@ -370,7 +391,26 @@ export function ProfileSelector() {
 
                       <div className="flex items-center gap-3 ml-3">
                         {auth?.authenticated ? (
-                          <ShieldCheck className="h-4 w-4 text-green-500" />
+                          <div className="flex items-center gap-1.5">
+                            {expiry && (
+                              <span className={cn(
+                                'text-[10px] whitespace-nowrap',
+                                expiry.status === 'ok' && 'text-muted-foreground',
+                                expiry.status === 'warning' && 'text-amber-600 dark:text-amber-400',
+                                expiry.status === 'expired' && 'text-red-600 dark:text-red-400'
+                              )}>
+                                {expiry.label}
+                              </span>
+                            )}
+                            <ShieldCheck className={cn(
+                              'h-4 w-4',
+                              expiry?.status === 'expired'
+                                ? 'text-red-500'
+                                : expiry?.status === 'warning'
+                                  ? 'text-amber-500'
+                                  : 'text-green-500'
+                            )} />
+                          </div>
                         ) : (
                           <>
                             <Shield className="h-4 w-4 text-muted-foreground" />
