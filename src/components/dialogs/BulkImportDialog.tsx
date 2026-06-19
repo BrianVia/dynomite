@@ -27,6 +27,8 @@ const generateWriteRequestId = () => {
   return `bulk-import-${Date.now()}-${writeRequestCounter}`;
 };
 
+const IMPORT_CHUNK_SIZE = 1_000;
+
 function validateItems(
   items: unknown,
   tableInfo: TableInfo
@@ -212,21 +214,43 @@ export function BulkImportDialog({
     setImportProgress(null);
     setImportResult(null);
     const writeId = generateWriteRequestId();
+    let processedBeforeChunk = 0;
+    let processedTotal = 0;
+    const errors: string[] = [];
     const unsubscribe = window.dynomite.onWriteProgress((progress) => {
       if (progress.writeId === writeId) {
-        setImportProgress(progress);
+        setImportProgress({
+          writeId,
+          processed: Math.min(parsedItems.length, processedBeforeChunk + progress.processed),
+          total: parsedItems.length,
+        });
       }
     });
 
     try {
-      // Build batch write operations
-      const operations: BatchWriteOperation[] = parsedItems.map((item) => ({
-        type: 'put' as const,
-        tableName: tableInfo.tableName,
-        item,
-      }));
+      setImportProgress({ writeId, processed: 0, total: parsedItems.length });
 
-      const result = await window.dynomite.batchWrite(profileName, operations, writeId);
+      for (let i = 0; i < parsedItems.length; i += IMPORT_CHUNK_SIZE) {
+        processedBeforeChunk = processedTotal;
+        const operations: BatchWriteOperation[] = parsedItems
+          .slice(i, i + IMPORT_CHUNK_SIZE)
+          .map((item) => ({
+            type: 'put' as const,
+            tableName: tableInfo.tableName,
+            item,
+          }));
+
+        const chunkResult = await window.dynomite.batchWrite(profileName, operations, writeId);
+        processedTotal += chunkResult.processed;
+        errors.push(...chunkResult.errors);
+        setImportProgress({ writeId, processed: processedTotal, total: parsedItems.length });
+      }
+
+      const result = {
+        success: errors.length === 0,
+        processed: processedTotal,
+        errors,
+      };
       setImportResult(result);
 
       if (result.success && result.errors.length === 0) {
@@ -239,7 +263,7 @@ export function BulkImportDialog({
     } catch (err) {
       setImportResult({
         success: false,
-        processed: 0,
+        processed: processedTotal,
         errors: [err instanceof Error ? err.message : 'Import failed'],
       });
     } finally {

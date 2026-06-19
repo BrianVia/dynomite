@@ -98,6 +98,23 @@ const generateQueryRequestId = (prefix: string) => {
   return `${prefix}-${Date.now()}-${queryRequestCounter}`;
 };
 
+const TABLE_ROW_RENDER_LIMIT = 50_000;
+
+function getFinalStreamedItems(
+  accumulatedItems: Record<string, unknown>[],
+  result: { items: Record<string, unknown>[] },
+  expectedItemCount: number
+): Record<string, unknown>[] {
+  if (accumulatedItems.length >= expectedItemCount || result.items.length === 0) {
+    return accumulatedItems;
+  }
+
+  return [
+    ...accumulatedItems,
+    ...result.items.slice(0, expectedItemCount - accumulatedItems.length),
+  ];
+}
+
 function formatBytes(bytes: number | undefined): string {
   if (bytes === undefined) return '-';
   if (bytes < 1024) return `${bytes} B`;
@@ -817,10 +834,11 @@ const TabQueryBuilder = memo(function TabQueryBuilder({ tab, tableInfo }: TabQue
       }
 
       const result = await window.dynomite.queryTableBatch(profileName, params, queryState.maxResults, currentQueryId);
+      const finalResults = getFinalStreamedItems(accumulatedItems, result, result.count);
 
       // Final update with complete results (in case any items weren't sent via progress)
       updateTabQueryState(tab.id, {
-        results: result.items,
+        results: finalResults,
         count: result.count,
         scannedCount: result.scannedCount,
         lastEvaluatedKey: result.lastEvaluatedKey,
@@ -933,10 +951,11 @@ const TabQueryBuilder = memo(function TabQueryBuilder({ tab, tableInfo }: TabQue
         indexName: queryState.selectedIndex || undefined,
         filters: scanFilters.length > 0 ? scanFilters : undefined,
       }, queryState.maxResults, currentQueryId);
+      const finalResults = getFinalStreamedItems(accumulatedItems, result, result.count);
 
       // Final update with complete results (in case any items weren't sent via progress)
       updateTabQueryState(tab.id, {
-        results: result.items,
+        results: finalResults,
         count: result.count,
         scannedCount: result.scannedCount,
         lastEvaluatedKey: result.lastEvaluatedKey,
@@ -1614,9 +1633,10 @@ const TabResultsTable = memo(function TabResultsTable({ tab, tableInfo, onFetchM
       }
 
       const result = await window.dynomite.queryTableBatch(tab.profileName, params, queryState.maxResults, currentQueryId);
+      const finalResults = getFinalStreamedItems(accumulatedItems, result, result.count);
 
       updateTabQueryState(tab.id, {
-        results: result.items,
+        results: finalResults,
         count: result.count,
         scannedCount: result.scannedCount,
         lastEvaluatedKey: result.lastEvaluatedKey,
@@ -1702,7 +1722,7 @@ const TabResultsTable = memo(function TabResultsTable({ tab, tableInfo, onFetchM
       ),
       cell: ({ getValue, row }) => {
         const rowIndex = row.index;
-        const rowData = queryState.results[rowIndex];
+        const rowData = row.original;
         // Use fast map lookups instead of store function calls
         const pendingChange = cellChangesMap.get(`${rowIndex}:${key}`);
         const rowDeleted = deletedRowsSet.has(rowIndex);
@@ -1757,8 +1777,16 @@ const TabResultsTable = memo(function TabResultsTable({ tab, tableInfo, onFetchM
     return visibility;
   }, [hiddenColumns]);
 
+  const displayedResults = useMemo(
+    () => queryState.results.length > TABLE_ROW_RENDER_LIMIT
+      ? queryState.results.slice(0, TABLE_ROW_RENDER_LIMIT)
+      : queryState.results,
+    [queryState.results]
+  );
+  const isTableDisplayCapped = displayedResults.length < queryState.results.length;
+
   const table = useReactTable({
-    data: queryState.results,
+    data: displayedResults,
     columns,
     state: { sorting, columnOrder, columnVisibility, columnSizing },
     onSortingChange: setSorting,
@@ -2353,6 +2381,11 @@ const TabResultsTable = memo(function TabResultsTable({ tab, tableInfo, onFetchM
         <div className="flex items-center gap-1.5 text-xs">
           <span className="font-medium">{queryState.results.length.toLocaleString()}</span>
           <span className="text-muted-foreground">items</span>
+          {isTableDisplayCapped && (
+            <span className="text-amber-500">
+              (showing first {displayedResults.length.toLocaleString()})
+            </span>
+          )}
           {selectedRows.size > 0 && (
             <span className="text-blue-500">({selectedRows.size} selected)</span>
           )}
@@ -2917,10 +2950,11 @@ export function TabContent() {
         }
 
         const result = await window.dynomite.queryTableBatch(activeTab.profileName, params, queryState.maxResults, currentFetchQueryId);
+        const finalResults = getFinalStreamedItems(accumulatedItems, result, existingResults.length + result.count);
 
         // Final update with complete results
         updateTabQueryState(activeTab.id, {
-          results: [...existingResults, ...result.items],
+          results: finalResults,
           count: existingCount + result.count,
           scannedCount: existingScanned + result.scannedCount,
           lastEvaluatedKey: result.lastEvaluatedKey,
@@ -2959,10 +2993,11 @@ export function TabContent() {
           filters: scanFilters.length > 0 ? scanFilters : undefined,
           exclusiveStartKey: queryState.lastEvaluatedKey,
         }, queryState.maxResults, currentFetchQueryId);
+        const finalResults = getFinalStreamedItems(accumulatedItems, result, existingResults.length + result.count);
 
         // Final update with complete results
         updateTabQueryState(activeTab.id, {
-          results: [...existingResults, ...result.items],
+          results: finalResults,
           count: existingCount + result.count,
           scannedCount: existingScanned + result.scannedCount,
           lastEvaluatedKey: result.lastEvaluatedKey,
@@ -3047,10 +3082,11 @@ export function TabContent() {
           const result = await window.dynomite.scanTableBatch(activeTab.profileName, {
             tableName: activeTab.tableInfo!.tableName,
           }, INITIAL_SCAN_LIMIT, currentScanQueryId);
+          const finalResults = getFinalStreamedItems(accumulatedItems, result, result.count);
 
           // Final update with complete results (in case any items weren't sent via progress)
           updateTabQueryState(activeTab.id, {
-            results: result.items,
+            results: finalResults,
             count: result.count,
             scannedCount: result.scannedCount,
             lastEvaluatedKey: result.lastEvaluatedKey,

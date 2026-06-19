@@ -97,7 +97,10 @@ export interface QueryResult {
   scannedCount: number;
 }
 
-export interface BatchQueryResult extends QueryResult {
+export interface BatchQueryResult extends Omit<QueryResult, 'items'> {
+  // Batch APIs stream the complete dataset through QueryProgress.items.
+  // The invoke return only carries the final unsent chunk as a fallback.
+  items: Record<string, unknown>[];
   elapsedMs: number;
   cancelled?: boolean;
 }

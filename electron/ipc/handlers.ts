@@ -289,7 +289,7 @@ export function registerIpcHandlers(): void {
 
     try {
       const docClient = await getDynamoDBDocClient(profileName);
-      const allItems: Record<string, unknown>[] = [];
+      let returnedItemCount = 0;
       let totalCount = 0;
       let totalScanned = 0;
       let lastKey: Record<string, unknown> | undefined = params.exclusiveStartKey;
@@ -300,14 +300,14 @@ export function registerIpcHandlers(): void {
       // Send query ID to renderer so it can cancel
       event.sender.send('query-started', { queryId });
 
-      while (allItems.length < maxResults) {
+      while (returnedItemCount < maxResults) {
         // Check if cancelled
         if (cancelledQueries.has(queryId)) {
           cancelledQueries.delete(queryId);
           const elapsedMs = Date.now() - startTime;
           event.sender.send('query-progress', {
             queryId,
-            count: allItems.length,
+            count: returnedItemCount,
             scannedCount: totalScanned,
             elapsedMs,
             items: pendingItems,
@@ -315,7 +315,7 @@ export function registerIpcHandlers(): void {
             cancelled: true,
           });
           return {
-            items: allItems,
+            items: pendingItems,
             lastEvaluatedKey: lastKey,
             count: totalCount,
             scannedCount: totalScanned,
@@ -329,7 +329,7 @@ export function registerIpcHandlers(): void {
         const response = await docClient.send(command);
 
         const batchItems = response.Items || [];
-        allItems.push(...batchItems);
+        returnedItemCount += batchItems.length;
         pendingItems.push(...batchItems);
         totalCount += response.Count || 0;
         totalScanned += response.ScannedCount || 0;
@@ -341,7 +341,7 @@ export function registerIpcHandlers(): void {
           lastProgressTime = now;
           const progress: QueryProgress = {
             queryId,
-            count: allItems.length,
+            count: returnedItemCount,
             scannedCount: totalScanned,
             elapsedMs: now - startTime,
             items: pendingItems,
@@ -357,7 +357,7 @@ export function registerIpcHandlers(): void {
       const elapsedMs = Date.now() - startTime;
       const finalProgress: QueryProgress = {
         queryId,
-        count: allItems.length,
+        count: returnedItemCount,
         scannedCount: totalScanned,
         elapsedMs,
         items: pendingItems,
@@ -366,7 +366,7 @@ export function registerIpcHandlers(): void {
       event.sender.send('query-progress', finalProgress);
 
       return {
-        items: allItems,
+        items: pendingItems,
         lastEvaluatedKey: lastKey,
         count: totalCount,
         scannedCount: totalScanned,
@@ -393,7 +393,7 @@ export function registerIpcHandlers(): void {
 
     try {
       const docClient = await getDynamoDBDocClient(profileName);
-      const allItems: Record<string, unknown>[] = [];
+      let returnedItemCount = 0;
       let totalCount = 0;
       let totalScanned = 0;
       let lastKey: Record<string, unknown> | undefined = params.exclusiveStartKey;
@@ -404,14 +404,14 @@ export function registerIpcHandlers(): void {
       // Send query ID to renderer so it can cancel
       event.sender.send('query-started', { queryId });
 
-      while (allItems.length < maxResults) {
+      while (returnedItemCount < maxResults) {
         // Check if cancelled
         if (cancelledQueries.has(queryId)) {
           cancelledQueries.delete(queryId);
           const elapsedMs = Date.now() - startTime;
           event.sender.send('query-progress', {
             queryId,
-            count: allItems.length,
+            count: returnedItemCount,
             scannedCount: totalScanned,
             elapsedMs,
             items: pendingItems,
@@ -419,7 +419,7 @@ export function registerIpcHandlers(): void {
             cancelled: true,
           });
           return {
-            items: allItems,
+            items: pendingItems,
             lastEvaluatedKey: lastKey,
             count: totalCount,
             scannedCount: totalScanned,
@@ -433,7 +433,7 @@ export function registerIpcHandlers(): void {
         const response = await docClient.send(command);
 
         const batchItems = response.Items || [];
-        allItems.push(...batchItems);
+        returnedItemCount += batchItems.length;
         pendingItems.push(...batchItems);
         totalCount += response.Count || 0;
         totalScanned += response.ScannedCount || 0;
@@ -445,7 +445,7 @@ export function registerIpcHandlers(): void {
           lastProgressTime = now;
           const progress: QueryProgress = {
             queryId,
-            count: allItems.length,
+            count: returnedItemCount,
             scannedCount: totalScanned,
             elapsedMs: now - startTime,
             items: pendingItems,
@@ -461,7 +461,7 @@ export function registerIpcHandlers(): void {
       const elapsedMs = Date.now() - startTime;
       const finalProgress: QueryProgress = {
         queryId,
-        count: allItems.length,
+        count: returnedItemCount,
         scannedCount: totalScanned,
         elapsedMs,
         items: pendingItems,
@@ -470,7 +470,7 @@ export function registerIpcHandlers(): void {
       event.sender.send('query-progress', finalProgress);
 
       return {
-        items: allItems,
+        items: pendingItems,
         lastEvaluatedKey: lastKey,
         count: totalCount,
         scannedCount: totalScanned,
