@@ -53,6 +53,7 @@ import { JsonEditorDialog } from './dialogs/JsonEditorDialog';
 import { SaveBookmarkDialog } from './dialogs/SaveBookmarkDialog';
 import { InsertRowDialog } from './dialogs/InsertRowDialog';
 import { BulkImportDialog } from './dialogs/BulkImportDialog';
+import { ImageUrlPreviewText } from './ImageUrlHoverPreview';
 import { useTabsStore, type Tab } from '@/stores/tabs-store';
 import { useProfileStore } from '@/stores/profile-store';
 import { useOpenInProfile } from '@/hooks/use-open-in-profile';
@@ -557,11 +558,13 @@ const CellRendererInner = memo(function CellRendererInner({ value }: { value: un
             </span>
           </button>
         ) : (
-          <span className="text-muted-foreground">{preview}</span>
+          <span className="text-muted-foreground">
+            <ImageUrlPreviewText text={preview} />
+          </span>
         )}
         {expanded && (
           <pre className="mt-1 p-2 bg-muted rounded text-xs overflow-x-auto max-w-md">
-            {json}
+            <ImageUrlPreviewText text={json} />
           </pre>
         )}
       </div>
@@ -572,12 +575,16 @@ const CellRendererInner = memo(function CellRendererInner({ value }: { value: un
   if (strValue.length > 80) {
     return (
       <span title={strValue} className="cursor-help">
-        {strValue.slice(0, 80)}...
+        <ImageUrlPreviewText text={strValue} maxLength={80} overflowSuffix="..." />
       </span>
     );
   }
 
-  return <span>{strValue}</span>;
+  return (
+    <span>
+      <ImageUrlPreviewText text={strValue} />
+    </span>
+  );
 });
 
 interface TabQueryBuilderProps {

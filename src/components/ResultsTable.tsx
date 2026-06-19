@@ -10,6 +10,7 @@ import {
 } from '@tanstack/react-table';
 import { ArrowUpDown, ArrowUp, ArrowDown, X, Loader2, ChevronRight, GripVertical, Copy, Check } from 'lucide-react';
 import { Button } from './ui/button';
+import { ImageUrlPreviewText } from './ImageUrlHoverPreview';
 import { useQueryStore } from '@/stores/query-store';
 import { useProfileStore } from '@/stores/profile-store';
 import { useTableStore } from '@/stores/table-store';
@@ -170,7 +171,7 @@ function CellRenderer({ value, onCopy }: { value: unknown; onCopy: (text: string
             className="text-muted-foreground cursor-pointer hover:bg-muted/50 px-1 rounded transition-colors"
             onClick={handleClick}
           >
-            {preview}
+            <ImageUrlPreviewText text={preview} />
           </span>
         )}
         <div className={cn('expand-collapse', expanded && 'expanded')}>
@@ -179,7 +180,7 @@ function CellRenderer({ value, onCopy }: { value: unknown; onCopy: (text: string
               className="mt-1 p-2 bg-muted rounded text-xs overflow-x-auto max-w-md cursor-pointer hover:ring-1 hover:ring-ring transition-all"
               onClick={handleClick}
             >
-              {json}
+              <ImageUrlPreviewText text={json} />
             </pre>
           </div>
         </div>
@@ -196,7 +197,7 @@ function CellRenderer({ value, onCopy }: { value: unknown; onCopy: (text: string
         className="cursor-pointer hover:bg-muted/50 px-1 rounded transition-colors"
         onClick={handleClick}
       >
-        {strValue.slice(0, 80)}...
+        <ImageUrlPreviewText text={strValue} maxLength={80} overflowSuffix="..." />
       </span>
     );
   }
@@ -206,7 +207,7 @@ function CellRenderer({ value, onCopy }: { value: unknown; onCopy: (text: string
       className="cursor-pointer hover:bg-muted/50 px-1 rounded transition-colors"
       onClick={handleClick}
     >
-      {strValue}
+      <ImageUrlPreviewText text={strValue} />
     </span>
   );
 }
@@ -229,7 +230,11 @@ function RowDetail({ row }: { row: Record<string, unknown> }) {
             <span className="font-medium text-muted-foreground min-w-[120px] shrink-0">{key}</span>
             <div className="flex-1 font-mono text-xs break-all">
               {typeof value === 'object' ? (
-                <pre className="whitespace-pre-wrap">{JSON.stringify(value, null, 2)}</pre>
+                <pre className="whitespace-pre-wrap">
+                  <ImageUrlPreviewText text={JSON.stringify(value, null, 2)} />
+                </pre>
+              ) : typeof value === 'string' ? (
+                <ImageUrlPreviewText text={value} />
               ) : (
                 formatCellValue(value)
               )}

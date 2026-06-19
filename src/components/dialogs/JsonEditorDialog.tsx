@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react';
 import { AlertCircle, X, Copy, Check, Code, ChevronDown, ChevronRight } from 'lucide-react';
 import { Button } from '../ui/button';
+import { ImageUrlPreviewText } from '../ImageUrlHoverPreview';
 import { usePendingChangesStore } from '@/stores/pending-changes-store';
 import { cn } from '@/lib/utils';
 import type { TableInfo } from '@/types';
@@ -74,7 +75,11 @@ function JsonPrimitive({ value }: { value: unknown }) {
   }
 
   if (typeof value === 'string') {
-    return <span className="text-emerald-700 dark:text-emerald-300">{JSON.stringify(value)}</span>;
+    return (
+      <span className="text-emerald-700 dark:text-emerald-300">
+        <ImageUrlPreviewText text={JSON.stringify(value)} />
+      </span>
+    );
   }
 
   if (typeof value === 'number') {
