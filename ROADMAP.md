@@ -2,6 +2,11 @@
 
 Implementation approaches for remaining features.
 
+For broader product and engineering prioritization, see:
+
+- [Holistic Review Recommendations](./docs/2026-05-19-holistic-review-recommendations.md)
+- [Competitive Feature Gap Analysis](./docs/2026-03-18-competitive-feature-gap-analysis.md)
+
 ---
 
 ## 1. Query Builder

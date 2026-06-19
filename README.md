@@ -132,6 +132,11 @@ See [ROADMAP.md](./ROADMAP.md) for planned features including:
 - **Environment Switcher**: "Open in DEV/TEST/PROD" button to run the same query in another profile
 - **Query Suggestions**: Parse README/docs to suggest likely queries based on data model
 
+Additional planning docs:
+
+- [Holistic Review Recommendations](./docs/2026-05-19-holistic-review-recommendations.md) - product, safety, workflow, and engineering priorities
+- [Competitive Feature Gap Analysis](./docs/2026-03-18-competitive-feature-gap-analysis.md) - parity and differentiation opportunities against other DynamoDB clients
+
 ## Tech Stack
 
 - **Electron** - Desktop app framework
