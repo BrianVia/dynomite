@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.12.0](https://github.com/BrianVia/dynomite/compare/v1.11.0...v1.12.0) (2026-06-19)
+
+
+### Features
+
+* add image URL hover previews ([3e8e177](https://github.com/BrianVia/dynomite/commit/3e8e177430fc64eab3eaf259526a9d5d52db75b6))
+
+
+### Bug Fixes
+
+* improve large result streaming and imports ([182de5f](https://github.com/BrianVia/dynomite/commit/182de5fb6772a6e6165b7a25d412ed138a8b671c))
+* stop recording initial auto-scans in query history ([41ff4c9](https://github.com/BrianVia/dynomite/commit/41ff4c9d5c6cb90e5f90b0a153e93aacd7642c11))
+
 ## [1.11.0](https://github.com/BrianVia/dynomite/compare/v1.10.1...v1.11.0) (2026-06-09)
 
 
