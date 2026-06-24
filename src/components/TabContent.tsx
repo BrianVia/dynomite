@@ -598,6 +598,7 @@ const TabQueryBuilder = memo(function TabQueryBuilder({ tab, tableInfo }: TabQue
   const profileName = tab.profileName;
   const [showSkCondition, setShowSkCondition] = useState(true);
   const [showSaveBookmark, setShowSaveBookmark] = useState(false);
+  const [customAttributeFilterIds, setCustomAttributeFilterIds] = useState<Set<string>>(() => new Set());
 
   // Local state for inputs - provides instant feedback without waiting for store re-render
   const [localPkValue, setLocalPkValue] = useState(queryState.pkValue);
@@ -616,6 +617,17 @@ const TabQueryBuilder = memo(function TabQueryBuilder({ tab, tableInfo }: TabQue
   useEffect(() => {
     setLocalSkEndValue(queryState.skValue2);
   }, [queryState.skValue2]);
+
+  useEffect(() => {
+    setCustomAttributeFilterIds((current) => {
+      if (current.size === 0) return current;
+
+      const filterIds = new Set(queryState.filters.map((filter) => filter.id));
+      const next = new Set([...current].filter((filterId) => filterIds.has(filterId)));
+
+      return next.size === current.size ? current : next;
+    });
+  }, [queryState.filters]);
 
   // Flush local values to store (called on blur and before running query)
   const flushToStore = useCallback(() => {
@@ -1225,16 +1237,26 @@ const TabQueryBuilder = memo(function TabQueryBuilder({ tab, tableInfo }: TabQue
           <div className="px-2 pb-2 space-y-2">
             {queryState.filters.map((filter, index) => {
               const operatorConfig = FILTER_OPERATORS.find(o => o.value === filter.operator);
+              const isCustomAttribute =
+                customAttributeFilterIds.has(filter.id) ||
+                (availableAttributes.length > 0 &&
+                  filter.attribute !== '' &&
+                  !availableAttributes.includes(filter.attribute));
+
               return (
                 <div key={filter.id} className="flex items-center gap-2">
                   <Filter className="h-3 w-3 text-muted-foreground shrink-0" />
                   {/* Attribute selector - dropdown with discovered keys + "Other..." */}
-                  {availableAttributes.length > 0 && !availableAttributes.includes(filter.attribute) && filter.attribute !== '' ? (
+                  {availableAttributes.length > 0 && isCustomAttribute ? (
                     // Custom attribute mode - show text input
                     <input
                       type="text"
                       value={filter.attribute}
                       onChange={(e) => {
+                        setCustomAttributeFilterIds((current) => {
+                          if (current.has(filter.id)) return current;
+                          return new Set(current).add(filter.id);
+                        });
                         const newFilters = [...queryState.filters];
                         newFilters[index] = { ...filter, attribute: e.target.value };
                         updateTabQueryState(tab.id, { filters: newFilters });
@@ -1252,8 +1274,15 @@ const TabQueryBuilder = memo(function TabQueryBuilder({ tab, tableInfo }: TabQue
                         onChange={(e) => {
                           const newFilters = [...queryState.filters];
                           if (e.target.value === '__other__') {
+                            setCustomAttributeFilterIds((current) => new Set(current).add(filter.id));
                             newFilters[index] = { ...filter, attribute: '' };
                           } else {
+                            setCustomAttributeFilterIds((current) => {
+                              if (!current.has(filter.id)) return current;
+                              const next = new Set(current);
+                              next.delete(filter.id);
+                              return next;
+                            });
                             newFilters[index] = { ...filter, attribute: e.target.value };
                           }
                           updateTabQueryState(tab.id, { filters: newFilters });
