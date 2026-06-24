@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.12.1](https://github.com/BrianVia/dynomite/compare/v1.12.0...v1.12.1) (2026-06-24)
+
+
+### Bug Fixes
+
+* allow custom filter attribute entry ([4045d3e](https://github.com/BrianVia/dynomite/commit/4045d3e47f29c92231d361a1e86512347bc8928d))
+* stabilize multiselect context menu ([7c18ddc](https://github.com/BrianVia/dynomite/commit/7c18ddc9a2719e814279f6c84204290b8c7ff11f))
+
 ## [1.12.0](https://github.com/BrianVia/dynomite/compare/v1.11.0...v1.12.0) (2026-06-19)
 
 
