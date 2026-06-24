@@ -129,13 +129,42 @@ function formatNumber(num: number | undefined): string {
   return num.toLocaleString();
 }
 
+function safeStringify(value: unknown, space?: number): string {
+  const seen = new WeakSet<object>();
+
+  try {
+    const json = JSON.stringify(value, (_key, nestedValue) => {
+      if (typeof nestedValue === 'bigint') {
+        return nestedValue.toString();
+      }
+
+      if (typeof nestedValue === 'object' && nestedValue !== null) {
+        if (seen.has(nestedValue)) {
+          return '[Circular]';
+        }
+        seen.add(nestedValue);
+      }
+
+      return nestedValue;
+    }, space);
+
+    return json ?? String(value);
+  } catch {
+    try {
+      return String(value);
+    } catch {
+      return Object.prototype.toString.call(value);
+    }
+  }
+}
+
 function formatCellValue(value: unknown): string {
   if (value === null) return 'null';
   if (value === undefined) return '';
   if (typeof value === 'boolean') return value ? 'true' : 'false';
   if (typeof value === 'number') return value.toLocaleString();
   if (typeof value === 'string') return value;
-  return JSON.stringify(value);
+  return safeStringify(value);
 }
 
 function parseEditValue(value: string, originalType: unknown): unknown {
@@ -533,8 +562,8 @@ const CellRendererInner = memo(function CellRendererInner({ value }: { value: un
   }
 
   if (typeof value === 'object') {
-    const json = JSON.stringify(value, null, 2);
-    const preview = JSON.stringify(value);
+    const json = safeStringify(value, 2);
+    const preview = safeStringify(value);
     const isLong = preview.length > 40;
 
     return (
@@ -1482,6 +1511,8 @@ const TabResultsTable = memo(function TabResultsTable({ tab, tableInfo, onFetchM
   const [hiddenColumns, setHiddenColumns] = useState<Set<string>>(new Set());
   const [showFieldPicker, setShowFieldPicker] = useState(false);
   const [copyDialogRowIndices, setCopyDialogRowIndices] = useState<number[] | null>(null);
+  const [bulkEditRowIndices, setBulkEditRowIndices] = useState<number[] | null>(null);
+  const [scriptEditRowIndices, setScriptEditRowIndices] = useState<number[] | null>(null);
   const [showExportDialog, setShowExportDialog] = useState(false);
   const [showInsertDialog, setShowInsertDialog] = useState(false);
   const [showBulkImportDialog, setShowBulkImportDialog] = useState(false);
@@ -1576,18 +1607,19 @@ const TabResultsTable = memo(function TabResultsTable({ tab, tableInfo, onFetchM
       return row;
     }).filter(Boolean);
 
-    const json = JSON.stringify(rows.length === 1 ? rows[0] : rows, null, 2);
+    const json = safeStringify(rows.length === 1 ? rows[0] : rows, 2);
     navigator.clipboard.writeText(json);
   }, [queryState.results]);
 
   const rowQueryShortcuts = useMemo(() => {
     if (contextMenu.rowIndex === null) return [];
+    if (contextMenu.rowIndices.length > 1) return [];
 
     const row = queryState.results[contextMenu.rowIndex];
     if (!row) return [];
 
     return buildRowQueryShortcuts(row, tableInfo);
-  }, [contextMenu.rowIndex, queryState.results, tableInfo]);
+  }, [contextMenu.rowIndex, contextMenu.rowIndices.length, queryState.results, tableInfo]);
 
   const handleOpenRowAsQuery = useCallback(async (shortcut: RowQueryShortcut) => {
     setContextMenu(CLOSED_CONTEXT_MENU);
@@ -2044,6 +2076,18 @@ const TabResultsTable = memo(function TabResultsTable({ tab, tableInfo, onFetchM
     });
   }, [selectedRows, selectedRowIndices]);
 
+  const handleOpenBulkEdit = useCallback((fieldName: string) => {
+    setBulkEditRowIndices(contextMenuRowIndices);
+    setBulkEditField(fieldName);
+    setContextMenu(CLOSED_CONTEXT_MENU);
+  }, [contextMenuRowIndices]);
+
+  const handleOpenScriptEdit = useCallback((fieldName: string) => {
+    setScriptEditRowIndices(contextMenuRowIndices);
+    setScriptEditField(fieldName);
+    setContextMenu(CLOSED_CONTEXT_MENU);
+  }, [contextMenuRowIndices]);
+
   const handleDeleteRow = useCallback(() => {
     const rowsToDelete = contextMenuRowIndices.length > 0 ? contextMenuRowIndices : [];
 
@@ -2376,7 +2420,7 @@ const TabResultsTable = memo(function TabResultsTable({ tab, tableInfo, onFetchM
                       const cellValue = cell.getValue();
                       const cellString = cellValue === null ? 'null'
                         : cellValue === undefined ? ''
-                        : typeof cellValue === 'object' ? JSON.stringify(cellValue, null, 2)
+                        : typeof cellValue === 'object' ? safeStringify(cellValue, 2)
                         : String(cellValue);
                       return (
                         <td
@@ -2564,10 +2608,7 @@ const TabResultsTable = memo(function TabResultsTable({ tab, tableInfo, onFetchM
                   {columns.slice(0, 20).map((col) => (
                     <button
                       key={col.id}
-                      onClick={() => {
-                        setBulkEditField(col.id as string);
-                        setContextMenu(CLOSED_CONTEXT_MENU);
-                      }}
+                      onClick={() => handleOpenBulkEdit(col.id as string)}
                       className="px-2 py-0.5 text-xs rounded bg-muted hover:bg-accent transition-colors"
                     >
                       {col.id}
@@ -2579,20 +2620,14 @@ const TabResultsTable = memo(function TabResultsTable({ tab, tableInfo, onFetchM
               {contextMenu.columnId && (
                 <>
                   <button
-                    onClick={() => {
-                      setBulkEditField(contextMenu.columnId!);
-                      setContextMenu(CLOSED_CONTEXT_MENU);
-                    }}
+                    onClick={() => handleOpenBulkEdit(contextMenu.columnId!)}
                     className="w-full flex items-center gap-2 px-3 py-1.5 text-sm text-left hover:bg-accent transition-colors"
                   >
                     <Pencil className="h-3.5 w-3.5" />
                     Set "{contextMenu.columnId}" to value... ({contextMenuRowCount} rows)
                   </button>
                   <button
-                    onClick={() => {
-                      setScriptEditField(contextMenu.columnId!);
-                      setContextMenu(CLOSED_CONTEXT_MENU);
-                    }}
+                    onClick={() => handleOpenScriptEdit(contextMenu.columnId!)}
                     className="w-full flex items-center gap-2 px-3 py-1.5 text-sm text-left hover:bg-accent transition-colors"
                   >
                     <Code className="h-3.5 w-3.5" />
@@ -2772,9 +2807,12 @@ const TabResultsTable = memo(function TabResultsTable({ tab, tableInfo, onFetchM
       {bulkEditField !== null && (
         <BulkEditDialog
           isOpen={bulkEditField !== null}
-          onClose={() => setBulkEditField(null)}
+          onClose={() => {
+            setBulkEditField(null);
+            setBulkEditRowIndices(null);
+          }}
           fieldName={bulkEditField}
-          selectedRows={selectedRowIndices}
+          selectedRows={bulkEditRowIndices ?? selectedRowIndices}
           results={queryState.results}
           tabId={tab.id}
           tableInfo={tableInfo}
@@ -2785,9 +2823,12 @@ const TabResultsTable = memo(function TabResultsTable({ tab, tableInfo, onFetchM
       {scriptEditField !== null && (
         <ScriptEditDialog
           isOpen={scriptEditField !== null}
-          onClose={() => setScriptEditField(null)}
+          onClose={() => {
+            setScriptEditField(null);
+            setScriptEditRowIndices(null);
+          }}
           fieldName={scriptEditField}
-          selectedRows={selectedRowIndices}
+          selectedRows={scriptEditRowIndices ?? selectedRowIndices}
           results={queryState.results}
           tabId={tab.id}
           tableInfo={tableInfo}
