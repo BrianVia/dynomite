@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.12.2](https://github.com/BrianVia/dynomite/compare/v1.12.1...v1.12.2) (2026-08-21)
+
+
+### Bug Fixes
+
+* ignore EPIPE when stdout/stderr close ([7a4de9b](https://github.com/BrianVia/dynomite/commit/7a4de9b89c164867c30502a320ac8e7dd271ae90))
+
 ## [1.12.1](https://github.com/BrianVia/dynomite/compare/v1.12.0...v1.12.1) (2026-06-24)
 
 
