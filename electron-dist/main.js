@@ -6,6 +6,14 @@ import { initAutoUpdater } from './updater.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const isDev = process.env.NODE_ENV === 'development';
+// If stdout/stderr close (e.g. launched from a pipe that exits), console.log
+// raises EPIPE; without a handler that becomes an uncaught-exception dialog.
+for (const stream of [process.stdout, process.stderr]) {
+    stream.on('error', (err) => {
+        if (err.code !== 'EPIPE')
+            throw err;
+    });
+}
 let mainWindow = null;
 function createWindow() {
     mainWindow = new BrowserWindow({

@@ -9,6 +9,14 @@ const __dirname = path.dirname(__filename);
 
 const isDev = process.env.NODE_ENV === 'development';
 
+// If stdout/stderr close (e.g. launched from a pipe that exits), console.log
+// raises EPIPE; without a handler that becomes an uncaught-exception dialog.
+for (const stream of [process.stdout, process.stderr]) {
+  stream.on('error', (err: NodeJS.ErrnoException) => {
+    if (err.code !== 'EPIPE') throw err;
+  });
+}
+
 let mainWindow: BrowserWindow | null = null;
 
 function createWindow() {
